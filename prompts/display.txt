@@ -1,0 +1,1 @@
+Change the User prompt command output and return a Professional, funny response that covers all the valid data in the output.
