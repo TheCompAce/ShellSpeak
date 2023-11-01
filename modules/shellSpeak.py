@@ -343,7 +343,7 @@ class ShellSpeak:
         print_colored_text("[bold][yellow]ShellSpeak\n======================================================\n[white]AI powered Console Input\nVisit: https://github.com/TheCompAce/ShellSpeak\nDonate: @BradfordBrooks79 on Venmo\n\n[grey]Tip: Type 'help' for Help.\n[yellow]======================================================\n")
 
     def display_help(self):
-        print_colored_text("[bold][yellow]ShellSpeak Help\n======================================================\n[white]type 'exit' to close ShellSpeak\n'user: /command/' pass a raw command to execute then reply threw the AI\n'about' Shows the About Information\n'help' Shows this Help information.\n[yellow]======================================================\n")
+        print_colored_text("[bold][yellow]ShellSpeak Help\n======================================================\n[white]Type:\n'exit' to close ShellSpeak\n'user: /command/' pass a raw command to execute then reply threw the AI\n'about' Shows the About Information\n'help' Shows this Help information.\n[yellow]======================================================\n")
 
     def run(self):
         self.display_about()
