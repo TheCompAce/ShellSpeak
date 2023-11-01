@@ -27,7 +27,7 @@ class ShellSpeak:
         self.settings = settings
         self.settingsRoot = os.path.abspath("settings.json")
 
-        self.llm = LLM(model_type=self.settings.get('model_type', ModelTypes('OpenAI')), use_cache=self.use_cache, cache_file=self.cache_file) #Zephyr7bBeta
+        self.llm = LLM(model_type=self.settings.get('model_type', ModelTypes.OpenAI), use_cache=self.use_cache, cache_file=self.cache_file) #Zephyr7bBeta
 
         logging.info(f"Shell Speak Loaded")
 
@@ -270,7 +270,7 @@ class ShellSpeak:
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate use Command : {send_prompt}")
-        command_output = self.llm.ask(send_prompt, user_input, model_type=self.settings.get('model_type', 'OpenAI'))
+        command_output = self.llm.ask(send_prompt, user_input, model_type=self.settings.get('model_type', ModelTypes.OpenAI))
         logging.info(f"Translate return Response : {command_output}")
 
         if command_output == None:
@@ -331,7 +331,7 @@ class ShellSpeak:
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate Output Display Prompt : {send_prompt}")
-        display_output = self.llm.ask(send_prompt, output, model_type=self.settings.get('model_type', ModelTypes('OpenAI')))
+        display_output = self.llm.ask(send_prompt, output, model_type=self.settings.get('model_type', ModelTypes.OpenAI))
         logging.info(f"Translate Output Display Response : {display_output}")
         return display_output
 

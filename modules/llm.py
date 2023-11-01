@@ -44,9 +44,7 @@ class LLM:
             cached_response = self.cache.get(system_prompt, user_prompt)
             if cached_response:
                 return cached_response
-        print(f"user_prompt = {user_prompt}")
         response = self._ask(system_prompt, user_prompt, model_type)
-        print(f"ask response = {response}")
         if self.use_cache:
             self.cache.set(system_prompt, user_prompt, response)
         return response
@@ -56,12 +54,9 @@ class LLM:
             model_type = self.model
         elif model_type is not self.model:
                 self.ClearModel(model_type)
-        print(f"ModelTypes 1 = {model_type}")
         if model_type == ModelTypes.OpenAI:
-            print(f"ModelTypes 2 = OpenAI")
             return self._ask_openai(system_prompt, user_prompt)
         elif model_type == ModelTypes.OpenAI4:
-            print(f"ModelTypes 2 = OpenAI4")
             return self._ask_openai(system_prompt, user_prompt, model="gpt-4", max_tokens=8190)
         elif model_type == ModelTypes.Mistral:
             return self._ask_mistral(system_prompt, user_prompt)
@@ -94,7 +89,7 @@ class LLM:
                 }
             ]
         }
-        
+
         tries = 2
         response = None
         while tries > 0:
@@ -105,12 +100,9 @@ class LLM:
                 tries -= 1
                 if tries == 0:
                     response = "Timeout"
-                    print(f"OpenAI Timeout = {response}")
             except requests.exceptions.RequestException as e:
                 response = e.response
                 tries -= 1
-
-        print(f"_ask_openai response = {response}")
 
         if response:
             if response.status_code == 200:
