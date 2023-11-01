@@ -5,6 +5,7 @@ ShellSpeak is an interactive command-line interface that enhances the terminal e
 ## Notice
 - This is only a Start, I need to go to sleep, I hope to work on this some more, and clean and fix some things.
 - Feel free to look at what I have done, and please check back in a day or two.
+- I plan on Expananding on this README this is just a quick draft.
 
 ## Setup
 
