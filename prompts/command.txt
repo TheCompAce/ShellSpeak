@@ -1,1 +1,8 @@
-Change the \"User\" prompt to a valid Windows Command Prompt call, with the releavant information made into the arguments for the command.
+Generate a command for execution on a system running {get_os_name}. The command should either be a single-line OS command, a batch file (using a "```shell" section), or a Python script (using a "```python" section). Utilize the available commands: {commands}. 
+
+If a single-line OS command is generated, it should be a command that can be executed directly in the command-line interface.
+
+If a batch file is generated, ensure it is formatted correctly with necessary comments and command lines for execution on {get_os_name}. Provide the batch commands between triple backticks with the label "shell", like so:
+```shell
+And for Python use the same format but for "python":
+```python
