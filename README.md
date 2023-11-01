@@ -25,7 +25,7 @@ python main.py
 ```
 
 ## Contribute
-- Check our Disscussion on our [GitHub](https://github.com/TheCompAce/ShellSpeak)
+- Check our Disscussion on our [GitHub Discussion](https://github.com/TheCompAce/ShellSpeak/discussions)
 - You can join to help build the code base, or to mod the GitHub. (I do have another job, this is mainly for learning.)
 - You can also donate (@BradfordBrooks79 on Venmo) if you want (I would love to do stuff like this full time.)
 
