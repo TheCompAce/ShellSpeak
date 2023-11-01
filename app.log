@@ -2991,3 +2991,64 @@ F:\My Programs\ShellSpeak\test
 
 Error:
 
+2023-11-01 02:45:04,269 - INFO - Using input : run
+2023-11-01 02:45:08,374 - INFO - Translate to Command : run
+2023-11-01 02:45:08,375 - INFO - Translate use Command : ## Base System
+In addtion to the above Commands, you can also make very simple shell/batch scripts (see "Shell Scripts" below) to execute to get a value we need.
+If this script should be saved then place a comment for the filename at the start of the script.
+When needing to change the working drive of our console, we should write a shell script to do it.
+When asking for Drives, I mean "Drives" not "Directories".
+Do NOT use "@echo off"!
+For system/batch files on Windows you must use "REM" instead of "#" for comment lines.
+For system/batch files on Windows you must use "REM filename" (where "filename" is the acutal filename) to comment lines.
+For system/batch files on Windows you must use "```shell" and not "```batch".
+Do not use "pause" or other such commands, so the process will return, back to our system.
+If the User prompt is a single valid Windows command, then responsed with the User prompt.
+Return only a single command listed the "run_command_list" section below, or that is standard commands for Windows's consoles:
+
+## System Variables:
+###
+{
+    "Operating System": 'Windows',
+    "run_command_list" : {
+        [FontGlyphAnimator.dll , SensorService.dll , wrjpgcom.exe , ras , tscfgwmi.dll , gif-7.dll , runxlrd.py , jsonschema - script.py , f1db7d81 - 95be-4911 - 935a-8ab71629112a_vmsvcext_sys.dll , atl.dll , swscale-0.dll , KBDBENE.DLL , th - TH , AudioEng.dll , w32tm.exe , encapi.dll , target , OfflineFilesWmiProvider_Uninstall.mof , agfio_plugin_CHAT.dll , msoledbsql.dll , c2.dll , WwaApi.dll , btpanui.dll , SSISOLEDB.dll , Magnification.dll , ntlanman.dll , System . Xml . XmlDocument.dll , Microsoft . NET , chcp.com , nv - nsight - cu - cli.bat , smphost.dll , SqlServerSpatial130.dll , WorkFoldersGPExt.dll , imagesp1.dll , deploymentcsps.dll , wsmprovhost.exe , xinput1_1.dll , MDMAppInstaller.exe , LibOVRPlatform32_1.dll , Microsoft . SqlServer . DtsMsg.dll , jsound.dll , mfdvdec.dll , microsoft.assessments.administration.presentation.dll , imagecodecs.exe , AppIdPolicyEngineApi.dll , wsnmp32.dll , fax2tiff.exe , edpcsp.dll , nmbind.exe , WinsatUninstall.mof , efssvc.dll , SharedRealitySvc.dll , HoloShellRuntime.dll , System . Windows . Controls . Ribbon.dll , lsm2bin - script.py , X3DAudio1_6.dll , XboxNetApiSvc.dll , osbaseln.dll , netiougc.exe , lpk.dll , TaskSchdPS.dll , XAPOFX1_4.dll , DAFIoT.dll , System . Diagnostics . TextWriterTraceListener.dll , dynamodb_dump.exe , libpango-1.0 - 0.dll , rtmmvrortc.dll , IncredibuildMenu2022NS.vsix , WfHC.dll , chgport.exe , certmgr.msc , Microsoft . SqlServer . ForEachFileEnumeratorWrap.dll , chgusr.exe , LogFiles , C_932.NLS , cudnn_cnn_infer64_8.dll , UevAgentPolicyGenerator.exe,.scikit - learn - post - link.bat , EapTeapConfig.dll , rastlsext.dll , XAudio2_2.dll , dxgwdi.dll , HNetCfgClient.dll , mkl_scalapack_ilp64.1.dll , EULA.txt , Microsoft . Win32.Registry.dll , KBDTAM99.DLL , wpdcomp.mof , Nui , DAFESCL.dll , fhlisten.dll , icutest58.dll , MouseSystemToastIcon.png , VmApplicationHealthMonitorProxy.dll , SQSRVRES.DLL , getfilesiginforedist.dll , KBDINMAL.DLL , Microsoft . PowerShell . Commands . Management.xml , OVRRedir.exe , BuildAddInVC7.dll , BcastDVRClient.dll , pgort140.dll , System . ServiceModel . NetTcp.dll , mkl_cdft_core.1.dll , srmstormod.dll , IdentityCRL , laps.dll , DragDropExperienceDataExchangeDelegated.dll , DisplaySystemToastIcon.png , watchmedo.exe , tttracer.exe , msiprov.dll , he - IL , System . ServiceModel . Http.dll , CoreShell.dll , lsmproxy.dll , regsvr32.exe , System . IO.FileSystem.dll , imapi2fs.dll , pcsvDevice_Uninstall.mof , baaupdate.exe , xactengine2_1.dll , System . Runtime . CompilerServices . VisualC.dll , win32_printer.mof , fveapibase.dll , DismApi.dll , AppVManifest.dll , RmClient.exe , Microsoft . VCToolsVersion.v142.default.txt , dpnaddr.dll , Windows . UI.Internal . Input . ExpressiveInput . Resource.dll , SecurityCenterBrokerPS.dll , jupyter - console - script.py, . DS_Store , ndistrace.mof , unregmp2.exe , FolderRedirectionWMIProvider.mof , tcmsetup.exe , OutdoorAudioEnvironment.bin , DeliveryOptimizationMIProvUninstall.mof , shlwapi.dll , Microsoft . ZuneMusic_8wekyb3d8bbwe , appverifUI.dll , jupyter - nbconvert.exe , cufft64_10.dll , rdpsign.exe , finger.exe , PhonePlatformAbstraction.dll , Qt53DExtras.dll , api - ms - win - crt - multibyte - l1 - 1 - 0.dll , SpeechPal.dll , hvsievaluator.exe , DMAlertListener . ProxyStub.dll , C_10008.NLS , iptest3 - script.py , easconsent.dll , w32topl.dll , PnPUnattend.exe , FontProvider.dll , clb.dll , gss - server.exe , cngkeyhelper.dll , HOSTNAME.EXE , WindowManagementAPI.dll , lcptr.tbl , HyperVSysprepProvider.dll , jimage.exe , BthAvctpSvc.dll , hgcpl.dll , RDSAppXHelper.dll , python3.exe , NetNat.mof , winrm.cmd , Windows . Devices . Radios.dll , ErrorDetails.dll , nppif64_11.dll , netevent.dll , C_28605.NLS , nvcuvid.dll , devenum.dll , SmallRoom.bin , upnp.dll , jimage.dll , Qt5QuickControls2.dll , msyuv.dll , wevtfwd.dll , microsoft.assessments.dll , dssec.dll , Microsoft . PowerShell . Commands . Utility.dll , LicenseManagerShellext.exe ,]
+    }
+}
+
+## Shell Scripts
+###
+For shell scripts use a block with:
+```shell
+For pyhton scripts use a block with:
+```pyhton
+
+
+2023-11-01 02:45:08,377 - INFO - Translate return Response : None
+2023-11-01 02:45:08,377 - INFO - Execute Command : None
+2023-11-01 02:45:08,377 - INFO - run command : None && cd
+2023-11-01 02:45:08,391 - INFO - run return : out: , err: 'None' is not recognized as an internal or external command,
+operable program or batch file.
+
+2023-11-01 02:45:08,392 - INFO - Execute Error : 'None' is not recognized as an internal or external command,
+operable program or batch file.
+
+2023-11-01 02:45:08,392 - INFO - Translate Command Execute : Command : None, Error: 'None' is not recognized as an internal or external command,
+operable program or batch file.
+
+2023-11-01 02:45:08,392 - INFO - Translate command output : Command : None, Error: 'None' is not recognized as an internal or external command,
+operable program or batch file.
+
+2023-11-01 02:45:08,392 - INFO - Translate Output : Command : None, Error: 'None' is not recognized as an internal or external command,
+operable program or batch file.
+
+2023-11-01 02:45:08,400 - INFO - Translate Output Display Prompt : ## Base System
+The User prompt contains the response from our Windows command.
+We want to format it using the "rpint" Text Styling.
+Ensure we make the response to follow our "Response Information"
+
+## Response Information
+Response Output: Take the User prompt data and make it human readable, Enusre to use colors, and fell free to make simley faces, and other acii char icons, or drawing ascii art.
+2023-11-01 02:45:08,401 - INFO - Translate Output Display Response : None
+2023-11-01 02:45:08,401 - INFO - Display Output : None
+2023-11-01 02:45:16,210 - INFO - Using input : exit
+2023-11-01 02:45:47,274 - INFO - Shell Speak Loaded
