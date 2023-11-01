@@ -9,7 +9,7 @@ import signal
 import base64
 
 from modules.llm import LLM, ModelTypes
-from modules.utils import get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, trim_to_token_count, replace_placeholders
+from modules.utils import get_file_size, get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_token_count, replace_placeholders
 
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -20,14 +20,19 @@ class CommandResult:
 
 class ShellSpeak:
     def __init__(self, settings, base_path):
-        self.llm_len = int(settings.get("llm_size", 300))
+
+        self.llm_len = int(settings.get("llm_size", 500))
         self.llm_history_len = int(settings.get("llm_history_size", 200))
+        self.llm_file_len = int(settings.get("llm_file_size", 200))
+
         self.llm_output_size = int(settings.get("llm_output_size", 700))
         self.use_cache = settings.get("use_cache", False)
         self.cache_file = settings.get("cache_file", None)
         self.settings = settings
         self.command_history = ""
         self.settingsRoot = base_path
+
+        self.files = []
 
         self.llm = LLM(model_type=self.settings.get('model_type', ModelTypes.OpenAI), use_cache=self.use_cache, cache_file=self.cache_file) #Zephyr7bBeta
 
@@ -48,6 +53,11 @@ class ShellSpeak:
         set_input = capture_styled_input(prompt)
         logging.info(f"Using input : {set_input}")
         return set_input
+    
+    def show_file(caption, body):
+        print_colored_text(f"[yellow]==== {caption} ====")
+        print_colored_text('[cyan]' + '\n'.join(body))
+        print_colored_text("[yellow]====================")
     
     def extract_python_command(self, text):
         match = re.search(r'```python(.*?)```', text, re.DOTALL)
@@ -74,17 +84,15 @@ class ShellSpeak:
 
             with open(python_filename, 'w') as python_file:
                 python_file.write('\n'.join(lines))
-            print("==== Python File ====")
-            print('\n'.join(lines))
-            print("====================")
+            self.show_file("Python File", lines)
             user_confirmation = input("Are you sure you want to run this Python script? (yes/no): ")
             if user_confirmation.lower() != 'yes':
-                return "Canceled Command"
+                return CommandResult("", "Run python file Canceled.")
             output = self.run_python_script(python_filename)
             if python_filename == 'temp.py':
                 os.remove(python_filename)  # Remove temporary python file
             return output
-        
+    
     def run_python_script(self, script):
         # If the script is a file, use 'python filename.py' to execute
         if script.endswith('.py'):
@@ -159,13 +167,11 @@ class ShellSpeak:
             logging.info(f"batch_filename : {batch_filename}")
             with open(batch_filename, 'w') as batch_file:
                 batch_file.write('\n'.join(lines))
-            print("==== Batch File ====")
-            print('\n'.join(lines))
-            print("====================")
+            self.show_file("Batch File", lines)
             user_confirmation = input("Are you sure you want to run this batch file? (yes/no): ")
             logging.info(f"user_confirmation : {user_confirmation}")
             if user_confirmation.lower() != 'yes':
-                return "Canceled Command"
+                return CommandResult("", "Run batch file Canceled.")
             ret_value = self.run_command(batch_filename)
             
             logging.info(f"command output : out: {ret_value.out}, err: {ret_value.err}")
@@ -252,16 +258,95 @@ class ShellSpeak:
         except Exception as e:
             logging.error(f"Error in handle_input: {e}")
 
+    def shrink_file_data(file_data, target_tokens):
+        # Your logic here to shrink the file data to target_tokens
+        # For now, we'll just truncate the data
+        truncated_data = file_data[:target_tokens]
+        return truncated_data
+
+    def find_relevant_data(file_data, target_tokens):
+        # Your logic here to find relevant information within the token count
+        return file_data[:target_tokens]
+
     def translate_to_command(self, user_input):
-        commands = map_possible_commands()
-        token_count = get_token_count(commands)
-        if token_count > self.llm_len:
-            commands = trim_to_token_count(commands, self.llm_len)
-        
         set_command_history = self.command_history
         token_count = get_token_count(set_command_history)
         if token_count > self.llm_history_len:
             set_command_history = trim_to_token_count(set_command_history, self.llm_history_len)
+
+        ext_tokens = token_count
+
+        set_command_files_data = []
+        total_tokens = 0
+
+        if len(self.files) > 0:
+            total_size = 0
+            total_data = ""
+            files_data = []
+            
+            for file in self.files:
+                file_data_content = read_file(file)  # Note: Changed to 'file_data_content'
+                file_data = {
+                    "file": file,
+                    "file_data": file_data_content,
+                    "file_size": get_file_size(file),
+                    "file_tokens": get_token_count(file_data_content)  # Note: Changed to 'file_data_content'
+                }
+                
+                total_size += file_data["file_size"]
+                total_data += file_data["file_data"]
+
+                files_data.append(file_data)
+
+            total_tokens = get_token_count(total_data)
+
+            # Sort files_data by file_tokens in descending order
+            files_data = sorted(files_data, key=lambda x: x['file_tokens'], reverse=True)
+
+            remaining_tokens = self.llm_file_len
+            new_files_data = []
+            
+            if total_tokens > self.llm_file_len:
+                # Step 1: Reduce size of the largest files first
+                for file_data in files_data:
+                    if remaining_tokens <= 0:
+                        break
+                    
+                    if file_data['file_tokens'] > remaining_tokens:
+                        # Shrink this file data
+                        file_data['adjusted_tokens'] = remaining_tokens
+                    else:
+                        file_data['adjusted_tokens'] = file_data['file_tokens']
+                    
+                    remaining_tokens -= file_data['adjusted_tokens']
+                    new_files_data.append(file_data)
+
+                # Step 2: Reclaim size for smaller files, if possible
+                for file_data in reversed(new_files_data):  # Start from smallest files
+                    if remaining_tokens <= 0:
+                        break
+
+                    extra_tokens = min(file_data['file_tokens'] - file_data['adjusted_tokens'], remaining_tokens)
+                    file_data['adjusted_tokens'] += extra_tokens
+                    remaining_tokens -= extra_tokens
+
+            for file_data in new_files_data:
+                total_tokens += file_data["adjusted_tokens"]
+                add_command_files_data = {
+                    "file:": file_data["file"],
+                    "data:": trim_to_token_count(file_data["file_data"], file_data["adjusted_tokens"])
+                }
+
+                set_command_files_data.append(add_command_files_data)
+
+        command_files_data = json.dumps(set_command_files_data)
+
+        ext_tokens += total_tokens
+
+        commands = map_possible_commands()
+        token_count = get_token_count(commands)
+        if token_count > (self.llm_len - ext_tokens):
+            commands = trim_to_token_count(commands, (self.llm_len - ext_tokens))
         
             
         logging.info(f"Translate to Command : {user_input}")
@@ -272,7 +357,8 @@ class ShellSpeak:
         kwargs = {
              'get_os_name': get_os_name(),
              'commands': commands,
-             'command_history': command_history
+             'command_history': command_history,
+             'command_files_data': command_files_data
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate use Command : {send_prompt}")
@@ -366,12 +452,13 @@ class ShellSpeak:
         print_colored_text("[bold][yellow]ShellSpeak\n======================================================\n[white]AI powered Console Input\nVisit: https://github.com/TheCompAce/ShellSpeak\nDonate: @BradfordBrooks79 on Venmo\n\n[grey]Tip: Type 'help' for Help.\n[yellow]======================================================\n")
 
     def display_help(self):
-        print_colored_text("[bold][yellow]ShellSpeak Help\n======================================================\n[white]Type:\n'exit' to close ShellSpeak\n'user: /command/' pass a raw command to execute then reply threw the AI\n'about' Shows the About Information\n'help' Shows this Help information.\n[yellow]======================================================\n")
+        print_colored_text("[bold][yellow]ShellSpeak Help\n======================================================\n[white]Type:\n'exit' to close ShellSpeak\n'user: /command/' pass a raw command to execute then reply threw the AI\n'about' Shows the About Information\n'clm' Clear command Memory\n'help' Shows this Help information.\n[yellow]======================================================\n")
 
     def run(self):
         self.display_about()
         while True:
             self.settings = load_settings(self.settingsRoot)
+            self.files = []
 
             user_input = self.capture_input()
             if user_input.lower() == 'exit':
@@ -380,6 +467,10 @@ class ShellSpeak:
                 self.display_about()
             elif user_input.lower() == 'help':
                 self.display_help()
+            elif user_input.lower() == 'clm':
+                self.command_history = ""
+                self.command_history += f"Command Input: {user_input}\nCommand Output: Command History cleared.\n"
+                self.display_output(f"Command Memory cleared")
             else:
                 if user_input.lower().startswith('user: '):
                     # Bypass AI translation and send raw command to the OS
@@ -387,10 +478,14 @@ class ShellSpeak:
                     result = self.run_command(raw_command)
                     translated_output = self.translate_output(result.out)
                     self.command_history += f"Command Input: {user_input}\nCommand Output: {result.out} Command Error: {result.err}\n"
-                    self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
+                    # self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
+                    self.display_output(translated_output)
                 else:
                     # Continue with AI translation for the command
                     translated_command = self.translate_to_command(user_input)
-                    translated_output = self.translate_output(translated_command)
-                    self.command_history += f"Command Input: {user_input}\nCommand Output: {translated_output}\n"
-                    self.display_output(translated_output)
+                    # if translated_command.err == "":
+                    #    translated_output = self.translate_output(translated_command)
+                    #    self.command_history += f"Command Input: {user_input}\nCommand Output: {translated_output}\n"
+                    #    self.display_output(translated_output)
+                    #else:
+                    self.display_output(translated_command)

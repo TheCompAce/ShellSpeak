@@ -206,3 +206,28 @@ def replace_placeholders(text, **kwargs):
 # }
 # replaced_text = replace_placeholders(text, **kwargs)
 # print(replaced_text)
+
+def read_file(filepath):
+    try:
+        with open(filepath, 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        return "File not found."
+    except PermissionError:
+        return "Permission denied."
+    except Exception as e:
+        return f"An error occurred: {e}"
+
+def read_file_line_by_line(filepath):
+    try:
+        with open(filepath, 'r') as f:
+            content = []
+            for line in f:
+                content.append(line.strip())
+            return '\n'.join(content)
+    except FileNotFoundError:
+        return "File not found."
+    except PermissionError:
+        return "Permission denied."
+    except Exception as e:
+        return f"An error occurred: {e}"

@@ -22,8 +22,8 @@ Also allow if commands are entered not for our OS "{get_os_name}" to then conver
 
 ## Shell Scripts
 ###
-For shell scripts use a block with:
+For shell scripts always use a block with:
 ```shell
-For pyhton scripts use a block with:
+For pyhton scripts always use a block with:
 ```pyhton
 

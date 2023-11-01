@@ -3,3 +3,4 @@ accelerate
 spacy
 termcolor
 rich
+bs4
