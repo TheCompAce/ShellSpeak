@@ -1,7 +1,12 @@
+import json
 import os
 import platform
 from termcolor import colored
 import spacy
+import re
+from rich.console import Console
+
+console = Console()
 
 # Load English tokenizer, POS tagger, parser, NER and word vectors
 nlp = spacy.load("en_core_web_sm")
@@ -49,14 +54,14 @@ def map_possible_commands():
         except PermissionError:
             # Don't have permission to access directory, skip
             continue
-    commands_str = ' '.join(unique_commands)
+    commands_str = ','.join(unique_commands)
     return commands_str
 
-def print_colored_text(text, end_newline=True):
+def print_colored_text_old(text, end_newline=True):
     """
     Utility function to print colored and styled text to the console.
-    The text can contain special formatting tags like /*bold/*, /*italic/*, and /*c:<color>/*.
-    Example: "/*bold/*/*c:green/*Hello\n/*c:magenta/*/*italic/*World!"
+    The text can contain special formatting tags like [bold], [italic], and [c:<color>].
+    Example: "[bold][c:green]Hello\n[c:magenta][italic]World!"
     """
     # Define color and style mappings
     color_map = {
@@ -77,8 +82,8 @@ def print_colored_text(text, end_newline=True):
     current_color = None
     current_styles = []
     
-    # Split the text by the /* tag to identify formatting commands
-    parts = text.split("/*")
+    # Split the text by the [ tag to identify formatting commands
+    parts = text.split("[")
     
     # Initialize an empty string to hold the final styled text
     styled_text = ""
@@ -86,14 +91,15 @@ def print_colored_text(text, end_newline=True):
     for part in parts:
         if part.startswith("c:"):
             # Set color
-            color_code = part[2:].split("/*")[0]
+            color_code = part[2:].split("]")[0]
             current_color = color_map.get(color_code, None)
-        elif part in style_map:
+        elif part.split("]")[0] in style_map:
             # Add style
-            current_styles.append(style_map[part])
-        elif "/*" in part:
+            style_cmd = part.split("]")[0]
+            current_styles.append(style_map[style_cmd])
+        elif "]" in part:
             # Reset styles or color
-            reset_cmds = part.split("/*")
+            reset_cmds = part.split("]")
             for cmd in reset_cmds:
                 if cmd == "reset":
                     current_styles = []
@@ -108,11 +114,16 @@ def print_colored_text(text, end_newline=True):
         else:
             # This part is a text that needs to be styled
             styled_text = colored(part, current_color, attrs=current_styles)
-            print(styled_text, end="")
+            print(styled_text, end="", flush=True)  # flush stdout here
     
     # Print a newline character to end the line
     if end_newline:
         print()
+
+
+def print_colored_text(text, end_newline=True):
+    end = "\n" if end_newline else ""
+    console.print(text, end=end)
 
 def capture_styled_input(prompt):
     # Print the prompt without a newline at the end
@@ -120,6 +131,24 @@ def capture_styled_input(prompt):
     
     # Capture and return user input
     return input()
+
+# Load settings from a JSON file
+def load_settings(filepath):
+    try:
+        with open(filepath, 'r') as f:
+            settings = json.load(f)
+            if os.path.isfile(settings['command_prompt']):
+                with open(settings['command_prompt'], 'r') as f:
+                    settings['command_prompt'] = f.read()
+            
+            if os.path.isfile(settings['display_prompt']):
+                with open(settings['display_prompt'], 'r') as f:
+                    settings['display_prompt'] = f.read()
+
+        return settings
+    except FileNotFoundError:
+        return {}
+
 
 def replace_placeholders(text, **kwargs):
     """
@@ -132,12 +161,29 @@ def replace_placeholders(text, **kwargs):
     Returns:
     - str: The text with placeholders replaced.
     """
-    try:
-        return text.format(**kwargs)
-    except KeyError as e:
-        return f"Placeholder {e} not found in keyword arguments"
 
-# Usage:
-# text = "Hello, {name}! Welcome to {place}."
-# replaced_text = replace_placeholders(text, name="Brad", place="North Carolina")
-# print(replaced_text)  # Output: Hello, Brad! Welcome to North
+    # Define a regular expression pattern to match placeholders like {placeholder_name}
+    pattern = re.compile(r'\{(\w+)\}')
+
+    def replacement(match):
+        # Extract the placeholder name from the match object
+        placeholder_name = match.group(1)
+
+        # If the placeholder name is found in kwargs, replace it with the corresponding value
+        if placeholder_name in kwargs:
+            return kwargs[placeholder_name]
+
+        # If the placeholder name is not found in kwargs, keep the original placeholder text
+        return match.group(0)
+
+    # Use the re.sub() function to replace all occurrences of the pattern in the text
+    return pattern.sub(replacement, text)
+
+# Example usage:
+# text = 'Return only commands listed in the {run_command_list} section for {get_os_name}\'s consoles.'
+# kwargs = {
+#     'run_command_list': '...',
+#     'get_os_name': 'Windows'
+# }
+# replaced_text = replace_placeholders(text, **kwargs)
+# print(replaced_text)

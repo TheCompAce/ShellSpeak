@@ -1,8 +1,29 @@
-Generate a command for execution on a system running {get_os_name}. The command should either be a single-line OS command, a batch file (using a "```shell" section), or a Python script (using a "```python" section). Utilize the available commands: {commands}. 
+## Base System
+In addtion to the above Commands, you can also make very simple shell/batch scripts (see "Shell Scripts" below) to execute to get a value we need.
+If this script should be saved then place a comment for the filename at the start of the script.
+When needing to change the working drive of our console, we should write a shell script to do it.
+When asking for Drives, I mean "Drives" not "Directories".
+Do NOT use "@echo off"!
+For system/batch files on Windows you must use "REM" instead of "#" for comment lines.
+For system/batch files on Windows you must use "REM filename" (where "filename" is the acutal filename) to comment lines.
+For system/batch files on Windows you must use "```shell" and not "```batch".
+Do not use "pause" or other such commands, so the process will return, back to our system.
+If the User prompt is a single valid {get_os_name} command, then responsed with the User prompt.
+Return only a single command listed the "run_command_list" section below, or that is standard commands for {get_os_name}'s consoles:
 
-If a single-line OS command is generated, it should be a command that can be executed directly in the command-line interface.
+## System Variables:
+###
+{
+    "Operating System": '{get_os_name}',
+    "run_command_list" : {
+        [{commands}]
+    }
+}
 
-If a batch file is generated, ensure it is formatted correctly with necessary comments and command lines for execution on {get_os_name}. Provide the batch commands between triple backticks with the label "shell", like so:
+## Shell Scripts
+###
+For shell scripts use a block with:
 ```shell
-And for Python use the same format but for "python":
-```python
+For pyhton scripts use a block with:
+```pyhton
+

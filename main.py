@@ -4,23 +4,8 @@ import sys
 
 from modules.menus.setup_menu import setup_menu
 from modules.shellSpeak import ShellSpeak
+from modules.utils import load_settings
 
-# Load settings from a JSON file
-def load_settings(filepath):
-    try:
-        with open(filepath, 'r') as f:
-            settings = json.load(f)
-            if os.path.isfile(settings['command_prompt']):
-                with open(settings['command_prompt'], 'r') as f:
-                    settings['command_prompt'] = f.read()
-            
-            if os.path.isfile(settings['display_prompt']):
-                with open(settings['display_prompt'], 'r') as f:
-                    settings['display_prompt'] = f.read()
-
-        return settings
-    except FileNotFoundError:
-        return {}
 
 
 

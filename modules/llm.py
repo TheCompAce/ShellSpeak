@@ -1,9 +1,12 @@
 from enum import Enum
 import json
+import sqlite3
 import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import requests
+
+from modules.responseCache import ResponseCache
 
 class ModelTypes(Enum):
     OpenAI = "OpenAI"
@@ -14,8 +17,11 @@ class ModelTypes(Enum):
     Zephyr7bBeta = "Zephyr7bBeta"
 
 class LLM:
-    def __init__(self, model_type):
+    def __init__(self, model_type, use_cache=False, cache_file=None):
         self.ClearModel(model_type)
+        self.use_cache = use_cache
+        if use_cache:
+            self.cache = ResponseCache(cache_file)
 
     def ClearModel(self, model_type):
         self.model = ModelTypes(model_type)
@@ -34,7 +40,15 @@ class LLM:
             return self._setup_zephyr_7bB()
 
     def ask(self, system_prompt, user_prompt, model_type=None):
-        return self._ask(system_prompt, user_prompt, model_type)
+        if self.use_cache:
+            cached_response = self.cache.get(system_prompt, user_prompt)
+            if cached_response:
+                return cached_response
+            print(f"{user_prompt}, {model_type}")
+        response = self._ask(system_prompt, user_prompt, model_type)
+        if self.use_cache:
+            self.cache.set(system_prompt, user_prompt, response)
+        return response
 
     def _ask(self, system_prompt, user_prompt, model_type = None):
         if model_type is None:
@@ -78,15 +92,26 @@ class LLM:
             ]
         }
         
-        response = requests.post(api_url, headers=headers, json=data)
-        
-        
-        if response.status_code == 200:
-             response_data = response.json()
-             # print(response_data)
-             return response_data["choices"][0]["message"]["content"]
+        tries = 2
+        response = None
+        while tries > 0:
+            try:
+                response = requests.post(api_url, headers=headers, json=data, timeout=(2, 60))
+                tries = 0
+            except requests.Timeout:
+                tries -= 1
+            except requests.exceptions.RequestException as e:
+                tries -= 1
+
+        if response:
+            if response.status_code == 200:
+                response_data = response.json()
+                # print(response_data)
+                return response_data["choices"][0]["message"]["content"]
+            else:
+                return f"Error: {response.status_code} - {response.json()}"
         else:
-             return f"Error: {response.status_code} - {response.json()}"
+            return f"Error: Timout calling OpenAI."
 
     def _ask_mistral(self, system_prompt, user_prompt):
         if self.tokenizerObj is None or self.modelObj is None:

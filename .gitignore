@@ -1,5 +1,8 @@
-__pycahce__
+__pycache__
+modules/__pycache__
 env
 Tools
 ShellSpeak.zip
 create_zip.bat
+temp.bat
+app.log

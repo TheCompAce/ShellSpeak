@@ -2,3 +2,4 @@ transformers
 accelerate
 spacy
 termcolor
+rich
