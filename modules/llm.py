@@ -44,7 +44,7 @@ class LLM:
             cached_response = self.cache.get(system_prompt, user_prompt)
             if cached_response:
                 return cached_response
-            print(f"{user_prompt}, {model_type}")
+        print(f"{system_prompt}, {user_prompt}, {model_type}")
         response = self._ask(system_prompt, user_prompt, model_type)
         if self.use_cache:
             self.cache.set(system_prompt, user_prompt, response)
