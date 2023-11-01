@@ -24,6 +24,9 @@ def main():
         print("1. Setup")
         print("2. Run")
         print("3. Exit")
+        print("-----------------------------------------------------------------")
+        print("(You can also start the script with /start to Start automaticly.)")
+        print("-----------------------------------------------------------------")
         choice = input("Choose an option: ")
         
         if choice == '1':
