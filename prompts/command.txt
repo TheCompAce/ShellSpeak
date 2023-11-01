@@ -16,7 +16,7 @@ Also allow if commands are entered not for our OS "{get_os_name}" to then conver
         "{commands}"
     },
     "command_list_history" : {
-        "{command_history}"
+        {command_history}
     }
 }
 

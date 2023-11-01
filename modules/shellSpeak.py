@@ -1,4 +1,5 @@
 # Import necessary modules
+import json
 import os
 import platform
 import re
@@ -147,22 +148,6 @@ class ShellSpeak:
             ret_value = self.run_command(command)
             logging.error(f"Execute Shell Directory Line Strip: {ret_value}")
 
-            if ret_value.err == "":
-                lines = ret_value.out.splitlines()
-                
-                if lines:
-                    logging.error(f"Execute Shell Directory line: {lines[-1]}")
-                    new_dir = lines[-1]  # Assuming the last line of output contains the new working directory
-                    logging.error(f"Execute Shell Directory new_dir: {new_dir}")
-                    if os.path.isdir(new_dir):
-                        os.chdir(new_dir)  # Change to the new working directory in your parent process
-                    else:
-                        logging.error(f"Invalid directory: {new_dir}")
-                else:
-                    logging.error("No output to determine the new working directory")
-                logging.info(f"Command Return : {ret_value}")
-            else:
-                logging.info(f"Command Return Error : {ret_value.err} with Command : {command}")
         else:
             # Multi-line command, create a batch file
             batch_filename = 'temp.bat'
@@ -234,6 +219,8 @@ class ShellSpeak:
                     logging.error(f"Invalid directory: {new_dir}")
             else:
                 logging.error("No output to determine the new working directory")
+        else:
+            stderr = f"Command : {command}, Error: {stderr}"
 
         logging.info(f"run return : out: {stdout}, err: {stderr}")
         
@@ -279,10 +266,13 @@ class ShellSpeak:
             
         logging.info(f"Translate to Command : {user_input}")
         send_prompt = self.settings['command_prompt']
+
+        command_history = json.dumps(set_command_history)
+
         kwargs = {
              'get_os_name': get_os_name(),
              'commands': commands,
-             'command_history': base64.b64encode(set_command_history.encode()).decode()
+             'command_history': command_history
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate use Command : {send_prompt}")
@@ -290,39 +280,47 @@ class ShellSpeak:
         logging.info(f"Translate return Response : {command_output}")
 
         if command_output == None:
-            command_output = "None"
+            command_output = "Error with Command AI sub system!"
         if '```shell' in command_output:
             tran_command = self.extract_shell_command(command_output)
             command_output = self.execute_shell_section(tran_command)
             if command_output.err != "":
                 print(f"Shell Error: {command_output.out}")
-            command_output = command_output.out
+                command_output = command_output.err
+            else:    
+                command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```batch' in command_output:
             tran_command = self.extract_batch_command(command_output)
             command_output = self.execute_shell_section(tran_command)
             if command_output.err != "":
                 print(f"Batch Error: {command_output.out}")
-            command_output = command_output.out
+                command_output = command_output.err
+            else:
+                command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```bash' in command_output:
             tran_command = self.extract_bash_command(command_output)
             command_output = self.execute_shell_section(tran_command)
             if command_output.err != "":
                 print(f"Bash Error: {command_output.out}")
-            command_output = command_output.out
+                command_output = command_output.err
+            else:
+                command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```python' in command_output:
-            tran_command = self.extract_python_script(command_output)
+            tran_command = self.extract_python_command(command_output)
             command_output = self.execute_python_script(tran_command)
             logging.info(f"Translate Python Execute : {command_output}")
         elif '```plaintext' in command_output:
             command_output = self.extract_plain_text(command_output)            
         else:
             success, command_output = self.execute_command(command_output)
-            if command_output.err != "":
-                print(f"Exe Error: {command_output.out}")
-            command_output = command_output.out
+            if not success:
+                print(f"Exe Error: {command_output.err}")
+                command_output = command_output.err
+            else:
+                command_output = command_output.out
             logging.info(f"Translate Command Execute : {command_output}")
         
 
