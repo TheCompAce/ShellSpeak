@@ -10,11 +10,12 @@ from modules.utils import load_settings
 
 
 def main():
-    settings = load_settings('settings.json')
+    base_path = os.path.abspath(".")
+    settings = load_settings(base_path)
 
     # Check for command-line arguments
     if len(sys.argv) > 1 and sys.argv[1] == '/start':
-        shellSpeak = ShellSpeak(settings)
+        shellSpeak = ShellSpeak(settings, base_path)
         shellSpeak.run()
         return
     
@@ -32,7 +33,7 @@ def main():
         if choice == '1':
             setup_menu()
         elif choice == '2':
-            shellSpeak = ShellSpeak(settings)
+            shellSpeak = ShellSpeak(settings, base_path)
             shellSpeak.run()
             break
         elif choice == '3':

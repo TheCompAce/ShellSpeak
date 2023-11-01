@@ -29,6 +29,9 @@ def get_os_name():
     return platform.system()
 
 def map_possible_commands():
+    # Get the operating system name
+    os_name = platform.system().lower()
+    
     # Get the PATH environment variable
     path_variable = os.environ.get('PATH', '')
     
@@ -38,6 +41,9 @@ def map_possible_commands():
     # Initialize a set to store unique command names
     unique_commands = set()
     
+    # List of wanted file extensions for Windows
+    windows_wanted_extensions = ['.exe', '.bat']
+    
     for directory in directories:
         try:
             # List all files in the directory
@@ -46,14 +52,25 @@ def map_possible_commands():
             # Filter out executable files and add them to the set
             for file in files:
                 file_path = os.path.join(directory, file)
+                
+                # Get the file extension
+                _, extension = os.path.splitext(file)
+                
                 if os.access(file_path, os.X_OK):
-                    unique_commands.add(file)
+                    if os_name == 'windows':
+                        if extension.lower() in windows_wanted_extensions:
+                            unique_commands.add(file)
+                    else:
+                        # On Unix-like systems, rely on executable permission
+                        unique_commands.add(file)
+                    
         except FileNotFoundError:
             # Directory in PATH does not exist, skip
             continue
         except PermissionError:
             # Don't have permission to access directory, skip
             continue
+    
     commands_str = ','.join(unique_commands)
     return commands_str
 
@@ -135,14 +152,16 @@ def capture_styled_input(prompt):
 # Load settings from a JSON file
 def load_settings(filepath):
     try:
-        with open(filepath, 'r') as f:
+        with open(os.path.join(filepath, "settings.json"), 'r') as f:
             settings = json.load(f)
-            if os.path.isfile(settings['command_prompt']):
-                with open(settings['command_prompt'], 'r') as f:
+            chk_file = os.path.join(filepath, settings['command_prompt'])
+            if os.path.isfile(chk_file):
+                with open(chk_file, 'r') as f:
                     settings['command_prompt'] = f.read()
             
-            if os.path.isfile(settings['display_prompt']):
-                with open(settings['display_prompt'], 'r') as f:
+            chk_file = os.path.join(filepath, settings['display_prompt'])
+            if os.path.isfile(chk_file):
+                with open(chk_file, 'r') as f:
                     settings['display_prompt'] = f.read()
 
         return settings

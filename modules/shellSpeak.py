@@ -5,8 +5,7 @@ import re
 import subprocess
 import logging
 import signal
-import threading
-import ctypes
+import base64
 
 from modules.llm import LLM, ModelTypes
 from modules.utils import get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, trim_to_token_count, replace_placeholders
@@ -19,13 +18,15 @@ class CommandResult:
         self.err = stderr
 
 class ShellSpeak:
-    def __init__(self, settings):
-        self.llm_len = int(settings.get("llm_size", 500))
+    def __init__(self, settings, base_path):
+        self.llm_len = int(settings.get("llm_size", 300))
+        self.llm_history_len = int(settings.get("llm_history_size", 200))
         self.llm_output_size = int(settings.get("llm_output_size", 700))
-        self.use_cache = settings.get("use_cache", True)
+        self.use_cache = settings.get("use_cache", False)
         self.cache_file = settings.get("cache_file", None)
         self.settings = settings
-        self.settingsRoot = os.path.abspath("settings.json")
+        self.command_history = ""
+        self.settingsRoot = base_path
 
         self.llm = LLM(model_type=self.settings.get('model_type', ModelTypes.OpenAI), use_cache=self.use_cache, cache_file=self.cache_file) #Zephyr7bBeta
 
@@ -118,6 +119,17 @@ class ShellSpeak:
             logging.error("No shell section found")
             shell_section = None
         return shell_section
+    
+    def extract_plain_text(self, text):
+        match = re.search(r'```plaintext(.*?)```', text, re.DOTALL)
+        if match:
+            shell_section = match.group(1).strip()
+        else:
+            logging.error("No shell section found")
+            shell_section = None
+        return shell_section
+    
+    
 
     def execute_shell_section(self, shell_section):
 
@@ -214,11 +226,8 @@ class ShellSpeak:
         
         if stderr == "":
             lines = stdout.strip().split("\n")
-            print(f"stdout = {stdout}")
-            print(f"stdout = {len(lines)}")
             if lines:
                 new_dir = lines[-1]  # Assuming the last line of output contains the new working directory
-                print(f"new_dir = {new_dir}")
                 if os.path.isdir(new_dir):
                     os.chdir(new_dir)  # Change to the new working directory in your parent process
                 else:
@@ -261,12 +270,19 @@ class ShellSpeak:
         token_count = get_token_count(commands)
         if token_count > self.llm_len:
             commands = trim_to_token_count(commands, self.llm_len)
+        
+        set_command_history = self.command_history
+        token_count = get_token_count(set_command_history)
+        if token_count > self.llm_history_len:
+            set_command_history = trim_to_token_count(set_command_history, self.llm_history_len)
+        
             
         logging.info(f"Translate to Command : {user_input}")
         send_prompt = self.settings['command_prompt']
         kwargs = {
              'get_os_name': get_os_name(),
-             'commands': commands
+             'commands': commands,
+             'command_history': base64.b64encode(set_command_history.encode()).decode()
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate use Command : {send_prompt}")
@@ -277,23 +293,36 @@ class ShellSpeak:
             command_output = "None"
         if '```shell' in command_output:
             tran_command = self.extract_shell_command(command_output)
-            command_output = self.execute_shell_section(tran_command).out
+            command_output = self.execute_shell_section(tran_command)
+            if command_output.err != "":
+                print(f"Shell Error: {command_output.out}")
+            command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```batch' in command_output:
             tran_command = self.extract_batch_command(command_output)
-            command_output = self.execute_shell_section(tran_command).out
+            command_output = self.execute_shell_section(tran_command)
+            if command_output.err != "":
+                print(f"Batch Error: {command_output.out}")
+            command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```bash' in command_output:
             tran_command = self.extract_bash_command(command_output)
-            command_output = self.execute_shell_section(tran_command).out
+            command_output = self.execute_shell_section(tran_command)
+            if command_output.err != "":
+                print(f"Bash Error: {command_output.out}")
+            command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```python' in command_output:
             tran_command = self.extract_python_script(command_output)
             command_output = self.execute_python_script(tran_command)
             logging.info(f"Translate Python Execute : {command_output}")
+        elif '```plaintext' in command_output:
+            command_output = self.extract_plain_text(command_output)            
         else:
             success, command_output = self.execute_command(command_output)
-            command_output = command_output
+            if command_output.err != "":
+                print(f"Exe Error: {command_output.out}")
+            command_output = command_output.out
             logging.info(f"Translate Command Execute : {command_output}")
         
 
@@ -307,17 +336,13 @@ class ShellSpeak:
             result = self.run_command(command)
             if result.err:
                 logging.info(f"Execute Error : {result.err}")
-                return False, f"Command : {command}, Error: {result.err}"
+                return False, result
             
             logging.info(f"Execute Output : {result.out}")
 
-            out_text = result.out
-            if out_text == "":
-                out_text = f"No output for '{command}'"
-
-            return True, out_text
+            return True, result
         except Exception as e:
-            return False, str(e)
+            return False, CommandResult("", str(e))
 
     def translate_output(self, output):
         logging.info(f"Translate Output : {output}")
@@ -363,9 +388,11 @@ class ShellSpeak:
                     raw_command = user_input[6:]  # Extract the command part from user_input
                     result = self.run_command(raw_command)
                     translated_output = self.translate_output(result.out)
+                    self.command_history += f"Command Input: {user_input}\nCommand Output: {result.out} Command Error: {result.err}\n"
                     self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
                 else:
                     # Continue with AI translation for the command
                     translated_command = self.translate_to_command(user_input)
                     translated_output = self.translate_output(translated_command)
+                    self.command_history += f"Command Input: {user_input}\nCommand Output: {translated_output}\n"
                     self.display_output(translated_output)

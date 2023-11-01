@@ -4,19 +4,19 @@ If this script should be saved then place a comment for the filename at the star
 When needing to change the working drive of our console, we should write a shell script to do it.
 When asking for Drives, I mean "Drives" not "Directories".
 Do NOT use "@echo off"!
-For system/batch files on Windows you must use "REM" instead of "#" for comment lines.
-For system/batch files on Windows you must use "REM filename" (where "filename" is the acutal filename) to comment lines.
-For system/batch files on Windows you must use "```shell" and not "```batch".
-Do not use "pause" or other such commands, so the process will return, back to our system.
 If the User prompt is a single valid {get_os_name} command, then responsed with the User prompt.
 Return only a single command listed the "run_command_list" section below, or that is standard commands for {get_os_name}'s consoles:
+Also allow if commands are entered not for our OS "{get_os_name}" to then convert it to a "{get_os_name}" command.
 
 ## System Variables:
 ###
 {
     "Operating System": '{get_os_name}',
     "run_command_list" : {
-        [{commands}]
+        "{commands}"
+    },
+    "command_list_history" : {
+        "{command_history}"
     }
 }
 
