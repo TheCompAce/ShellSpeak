@@ -8,7 +8,7 @@ import signal
 import threading
 import ctypes
 
-from modules.llm import LLM
+from modules.llm import LLM, ModelTypes
 from modules.utils import get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, trim_to_token_count, replace_placeholders
 
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -25,8 +25,9 @@ class ShellSpeak:
         self.use_cache = settings.get("use_cache", True)
         self.cache_file = settings.get("cache_file", None)
         self.settings = settings
+        self.settingsRoot = os.path.abspath("settings.json")
 
-        self.llm = LLM(model_type=self.settings.get('model_type', 'OpenAI'), use_cache=self.use_cache, cache_file=self.cache_file) #Zephyr7bBeta
+        self.llm = LLM(model_type=self.settings.get('model_type', ModelTypes('OpenAI')), use_cache=self.use_cache, cache_file=self.cache_file) #Zephyr7bBeta
 
         logging.info(f"Shell Speak Loaded")
 
@@ -136,7 +137,9 @@ class ShellSpeak:
 
             if ret_value.err == "":
                 lines = ret_value.out.splitlines()
+                
                 if lines:
+                    logging.error(f"Execute Shell Directory line: {lines[-1]}")
                     new_dir = lines[-1]  # Assuming the last line of output contains the new working directory
                     logging.error(f"Execute Shell Directory new_dir: {new_dir}")
                     if os.path.isdir(new_dir):
@@ -210,10 +213,12 @@ class ShellSpeak:
         stdout, stderr = process.communicate()
         
         if stderr == "":
-            lines = stdout.split("\n")
+            lines = stdout.strip().split("\n")
+            print(f"stdout = {stdout}")
+            print(f"stdout = {len(lines)}")
             if lines:
                 new_dir = lines[-1]  # Assuming the last line of output contains the new working directory
-                print(new_dir)
+                print(f"new_dir = {new_dir}")
                 if os.path.isdir(new_dir):
                     os.chdir(new_dir)  # Change to the new working directory in your parent process
                 else:
@@ -326,7 +331,7 @@ class ShellSpeak:
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate Output Display Prompt : {send_prompt}")
-        display_output = self.llm.ask(send_prompt, output, model_type=self.settings.get('model_type', 'OpenAI'))
+        display_output = self.llm.ask(send_prompt, output, model_type=self.settings.get('model_type', ModelTypes('OpenAI')))
         logging.info(f"Translate Output Display Response : {display_output}")
         return display_output
 
@@ -334,22 +339,33 @@ class ShellSpeak:
         logging.info(f"Display Output : {output}")
         print_colored_text(output)
 
+    def display_about(self):
+        print_colored_text("[bold][yellow]ShellSpeak\n======================================================\n[white]AI powered Console Input\nVisit: https://github.com/TheCompAce/ShellSpeak\nDonate: @BradfordBrooks79 on Venmo\n\n[grey]Tip: Type 'help' for Help.\n[yellow]======================================================\n")
+
+    def display_help(self):
+        print_colored_text("[bold][yellow]ShellSpeak Help\n======================================================\n[white]type 'exit' to close ShellSpeak\n'user: /command/' pass a raw command to execute then reply threw the AI\n'about' Shows the About Information\n'help' Shows this Help information.\n[yellow]======================================================\n")
+
     def run(self):
+        self.display_about()
         while True:
-            self.settings = load_settings('settings.json')
+            self.settings = load_settings(self.settingsRoot)
 
             user_input = self.capture_input()
             if user_input.lower() == 'exit':
                 break
-
-            if user_input.lower().startswith('user: '):
-                # Bypass AI translation and send raw command to the OS
-                raw_command = user_input[6:]  # Extract the command part from user_input
-                result = self.run_command(raw_command)
-                translated_output = self.translate_output(result.out)
-                self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
+            elif user_input.lower() == 'about':
+                self.display_about()
+            elif user_input.lower() == 'help':
+                self.display_help()
             else:
-                # Continue with AI translation for the command
-                translated_command = self.translate_to_command(user_input)
-                translated_output = self.translate_output(translated_command)
-                self.display_output(translated_output)
+                if user_input.lower().startswith('user: '):
+                    # Bypass AI translation and send raw command to the OS
+                    raw_command = user_input[6:]  # Extract the command part from user_input
+                    result = self.run_command(raw_command)
+                    translated_output = self.translate_output(result.out)
+                    self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
+                else:
+                    # Continue with AI translation for the command
+                    translated_command = self.translate_to_command(user_input)
+                    translated_output = self.translate_output(translated_command)
+                    self.display_output(translated_output)

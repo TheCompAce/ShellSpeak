@@ -1,9 +1,10 @@
+import os
 import sqlite3
 import json
 
 class ResponseCache:
     def __init__(self, cache_file=None):
-        self.cache_file = cache_file
+        self.cache_file = os.path.abspath(cache_file) if cache_file else None
         self.cache = {}  # In-memory cache
         if cache_file:
             self._init_db()
@@ -15,6 +16,7 @@ class ResponseCache:
 
     def get(self, system_prompt, user_prompt):
         if self.cache_file:
+            print(self.cache_file)
             with sqlite3.connect(self.cache_file) as conn:
                 cur = conn.execute('SELECT response FROM cache WHERE system_prompt=? AND user_prompt=?', (system_prompt, user_prompt))
                 row = cur.fetchone()

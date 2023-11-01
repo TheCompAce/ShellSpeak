@@ -4,4 +4,4 @@ We want to format it using the "rpint" Text Styling.
 Ensure we make the response to follow our "Response Information"
 
 ## Response Information
-Response Output: Take the User prompt data and make it human readable, Enusre to use colors, and fell free to make simley faces, and other acii char icons, or drawing ascii art.
+Response Output: Take the User prompt data and make it human readable, Enusre to use colors when needed, and often.
