@@ -7,6 +7,12 @@ ShellSpeak is an interactive command-line interface that enhances the terminal e
 - Feel free to look at what I have done, and please check back in a day or two.
 - I plan on Expananding on this README this is just a quick draft.
 
+## Information
+
+![ShellSpeak Command Processing Flow](assets/flow.png)
+
+The above diagram illustrates the architecture of ShellSpeak. It provides an in-depth look into how the program captures and processes user input to execute commands. We have recently added the capability to handle file inputs and to manage command history, enhancing the overall user experience.
+
 ## Setup
 
 1. Clone the repository:

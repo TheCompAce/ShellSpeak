@@ -54,7 +54,7 @@ class ShellSpeak:
         logging.info(f"Using input : {set_input}")
         return set_input
     
-    def show_file(caption, body):
+    def show_file(self, caption, body):
         print_colored_text(f"[yellow]==== {caption} ====")
         print_colored_text('[cyan]' + '\n'.join(body))
         print_colored_text("[yellow]====================")
@@ -279,6 +279,12 @@ class ShellSpeak:
         set_command_files_data = []
         total_tokens = 0
 
+        # Extract file paths from user_input
+        file_paths = re.findall(r'file:\s*(".*?"|\S+)', user_input)
+        
+        # Remove quotes from file paths, if present
+        self.files = [fp.strip('"') for fp in file_paths]
+
         if len(self.files) > 0:
             total_size = 0
             total_data = ""
@@ -430,13 +436,21 @@ class ShellSpeak:
 
     def translate_output(self, output):
         logging.info(f"Translate Output : {output}")
+        set_command_history = self.command_history
+        token_count = get_token_count(set_command_history)
+        if token_count > self.llm_history_len:
+            set_command_history = trim_to_token_count(set_command_history, self.llm_history_len)
+
+        ext_tokens = token_count
+
         token_count = get_token_count(output)
-        if token_count > self.llm_output_size:
-            output = trim_to_token_count(output, self.llm_output_size)
+        if token_count > self.llm_output_size - ext_tokens:
+            output = trim_to_token_count(output, self.llm_output_size - ext_tokens)
 
         send_prompt = self.settings['display_prompt']
         kwargs = {
-             'get_os_name': get_os_name()
+             'get_os_name': get_os_name(),
+             'command_history': set_command_history
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate Output Display Prompt : {send_prompt}")
@@ -452,7 +466,7 @@ class ShellSpeak:
         print_colored_text("[bold][yellow]ShellSpeak\n======================================================\n[white]AI powered Console Input\nVisit: https://github.com/TheCompAce/ShellSpeak\nDonate: @BradfordBrooks79 on Venmo\n\n[grey]Tip: Type 'help' for Help.\n[yellow]======================================================\n")
 
     def display_help(self):
-        print_colored_text("[bold][yellow]ShellSpeak Help\n======================================================\n[white]Type:\n'exit' to close ShellSpeak\n'user: /command/' pass a raw command to execute then reply threw the AI\n'about' Shows the About Information\n'clm' Clear command Memory\n'help' Shows this Help information.\n[yellow]======================================================\n")
+        print_colored_text("[bold][yellow]ShellSpeak Help\n======================================================\n[white]Type:\n'exit' to close ShellSpeak\n'user: /command/' pass a raw command to execute then reply threw the AI\n'about' Shows the About Information\n'clm' Clear command Memory\n'file: /filepath/' adds file data to the command prompt,\n'help' Shows this Help information.\n[yellow]======================================================\n")
 
     def run(self):
         self.display_about()

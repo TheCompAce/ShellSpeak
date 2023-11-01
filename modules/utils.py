@@ -231,3 +231,13 @@ def read_file_line_by_line(filepath):
         return "Permission denied."
     except Exception as e:
         return f"An error occurred: {e}"
+
+def get_file_size(filepath):
+    try:
+        return os.path.getsize(filepath)
+    except FileNotFoundError:
+        return "File not found."
+    except PermissionError:
+        return "Permission denied."
+    except Exception as e:
+        return f"An error occurred: {e}"
