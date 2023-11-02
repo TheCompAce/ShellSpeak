@@ -69,7 +69,6 @@ Runs with using the start menu, base on the settings.json that already exist.
 
 
 ## Contribute
-- Check our Discussion on our [GitHub Discussion](https://github.com/TheCompAce/ShellSpeak/discussions)
 - You can join to help build the code base, or to mod the GitHub. (I do have another job, this is mainly for learning.)
 - You can also donate (@BradfordBrooks79 on Venmo) if you want (I would love to do stuff like this full time.)
 
