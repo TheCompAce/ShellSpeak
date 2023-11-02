@@ -59,7 +59,7 @@ Auto Run the `ShellSpeak` script from the command line:
 python main.py /start
 ```
 
-(We have a run.bat, and ai_cmd.bat (auto run), that builds a environment, and runs pip install -r requirements.txt)
+(We have a run.bat, and ai_cmd.bat (auto run), that builds a environment, and runs "pip install -r requirements.txt")
 
 
 ## Contribute
