@@ -6,7 +6,6 @@ ShellSpeak is an interactive command-line interface that enhances the terminal e
 - This can and will delete files if you are not careful, I suggest you use this on a system you do not care about, or a emulator.
 - I only have developed and tested on windows, "should" work with other consoles, and on windows, OpenAI loves using *nix comments.
 - Feel free to look at what I have done, and please check back in a day or two.
-- I plan on Expanding on this README this is just a quick draft.
 
 ## Highlights
 - Works just like the console. (With pretty colors.)
