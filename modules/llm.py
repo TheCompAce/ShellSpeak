@@ -3,6 +3,7 @@ import json
 import sqlite3
 import os
 import torch
+import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import requests
 
@@ -15,6 +16,7 @@ class ModelTypes(Enum):
     StableBeluga7B = "StableBeluga7B"
     Zephyr7bAlpha = "Zephyr7bAlpha"
     Zephyr7bBeta = "Zephyr7bBeta"
+    Falcon7BInst = "Falcon7BInst"
 
 class LLM:
     def __init__(self, model_type, use_cache=False, cache_file=None):
@@ -50,6 +52,7 @@ class LLM:
         return response
 
     def _ask(self, system_prompt, user_prompt, model_type = None):
+        
         if model_type is None:
             model_type = self.model
         elif model_type is not self.model:
@@ -66,6 +69,8 @@ class LLM:
             return self._ask_zephyr_7b(system_prompt, user_prompt)
         elif model_type == ModelTypes.Zephyr7bBeta:
             return self._ask_zephyr_7bB(system_prompt, user_prompt)
+        elif model_type == ModelTypes.Falcon7BInst:
+            return self._ask_falcon_7b_instruct(system_prompt, user_prompt)
 
     def _ask_openai(self, system_prompt, user_prompt, model = "gpt-3.5-turbo", max_tokens=4096):
         # Placeholder for actual OpenAI API request
@@ -176,6 +181,32 @@ class LLM:
     def _setup_zephyr_7bB(self):
         if self.pipeObj is None:
             self.pipeObj= pipeline("text-generation", model="HuggingFaceH4/zephyr-7b-beta", torch_dtype=torch.bfloat16, device_map="auto")
+
+    def _setup_falcon_7b_instruct(self):
+        if self.modelObj is None or self.tokenizerObj is None:
+            self.modelObj = AutoModelForCausalLM.from_pretrained("tiiuae/falcon-7b-instruct")
+            self.tokenizerObj = AutoTokenizer.from_pretrained("tiiuae/falcon-7b-instruct")
+
+    def _ask_falcon_7b_instruct(self, system_prompt, user_prompt):
+        if self.tokenizerObj is None or self.modelObj is None:
+            self._setup_falcon_7b_instruct()
+        pipeline = transformers.pipeline(
+            "text-generation",
+            model=self.modelObj,
+            tokenizer=self.tokenizerObj,
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
+            device_map="auto",
+        )
+        sequences = pipeline(
+            f"{system_prompt}\n{user_prompt}",
+            max_length=200,
+            do_sample=True,
+            top_k=10,
+            num_return_sequences=1,
+            eos_token_id=self.tokenizerObj.eos_token_id,
+        )
+        return sequences[0]['generated_text']
 
 
     def __repr__(self):
