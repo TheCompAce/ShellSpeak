@@ -1,5 +1,5 @@
 {
     "command_prompt": "prompts/command.txt",
     "display_prompt": "prompts/display.txt",
-    "model": "OpenAI4"
+    "model": "OpenAI"
 }
