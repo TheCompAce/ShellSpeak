@@ -49,18 +49,26 @@ The above diagram illustrates the architecture of ShellSpeak. It provides an in-
 
 ## Usage
 
+### Running the Script
 Run the `ShellSpeak` script from the command line:
 ```bash
 python main.py
 ```
+This uses a menu to Setup and Run ShellSpeak.
 
 Auto Run the `ShellSpeak` script from the command line:
 ```bash
 python main.py /start
 ```
+Runs with using the start menu, base on the settings.json that already exist.
 
 (We have a run.bat, and ai_cmd.bat (auto run), that builds a environment, and runs "pip install -r requirements.txt")
 
+### Notes on settings.json
+- the "prompt" values can be a string or a file path, if it is a file path then we use the file's data, this way we can have long prompts.
+- the llm.py has a cache system, but it is mainly for debugging, and seems not to work well, as commands tend to be the same, but do different things.
+
+Test 123
 
 ## Contribute
 - Check our Discussion on our [GitHub Discussion](https://github.com/TheCompAce/ShellSpeak/discussions)
