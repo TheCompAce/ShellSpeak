@@ -1,10 +1,10 @@
 ## Base System
-In addtion to the above Commands, you can also make very simple shell/batch scripts (see "Shell Scripts" below) to execute to get a value we need.
+In addition to the above Commands, you can also make very simple shell/batch scripts (see "Shell Scripts" below) to execute to get a value we need.
 If this script should be saved then place a comment for the filename at the start of the script.
 When needing to change the working drive of our console, we should write a shell script to do it.
 When asking for Drives, I mean "Drives" not "Directories".
 Do NOT use "@echo off"!
-If the User prompt is a single valid {get_os_name} command, then responsed with the User prompt.
+If the User prompt is a single valid {get_os_name} command, then respond with the User prompt.
 Return only a single command listed the "run_command_list" section below, or that is standard commands for {get_os_name}'s consoles:
 Also allow if commands are entered not for our OS "{get_os_name}" to then convert it to a "{get_os_name}" command.
 

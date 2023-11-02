@@ -21,9 +21,9 @@ class CommandResult:
 class ShellSpeak:
     def __init__(self, settings, base_path):
 
-        self.llm_len = int(settings.get("llm_size", 500))
-        self.llm_history_len = int(settings.get("llm_history_size", 200))
-        self.llm_file_len = int(settings.get("llm_file_size", 200))
+        self.llm_len = int(settings.get("llm_size", 700))
+        self.llm_history_len = int(settings.get("llm_history_size", 300))
+        self.llm_file_len = int(settings.get("llm_file_size", 300))
 
         self.llm_output_size = int(settings.get("llm_output_size", 700))
         self.use_cache = settings.get("use_cache", False)
@@ -276,6 +276,8 @@ class ShellSpeak:
 
         ext_tokens = token_count
 
+        command_history = json.dumps(set_command_history)
+
         set_command_files_data = []
         total_tokens = 0
 
@@ -358,7 +360,7 @@ class ShellSpeak:
         logging.info(f"Translate to Command : {user_input}")
         send_prompt = self.settings['command_prompt']
 
-        command_history = json.dumps(set_command_history)
+        
 
         kwargs = {
              'get_os_name': get_os_name(),
@@ -483,7 +485,7 @@ class ShellSpeak:
                 self.display_help()
             elif user_input.lower() == 'clm':
                 self.command_history = ""
-                self.command_history += f"Command Input: {user_input}\nCommand Output: Command History cleared.\n"
+                # self.command_history += f"Command Input: {user_input}\nCommand Output: Command History cleared.\n"
                 self.display_output(f"Command Memory cleared")
             else:
                 if user_input.lower().startswith('user: '):
@@ -491,7 +493,7 @@ class ShellSpeak:
                     raw_command = user_input[6:]  # Extract the command part from user_input
                     result = self.run_command(raw_command)
                     translated_output = self.translate_output(result.out)
-                    self.command_history += f"Command Input: {user_input}\nCommand Output: {result.out} Command Error: {result.err}\n"
+                    self.command_history += f"History: [Command Input: {user_input}\nCommand Output: {result.out} Command Error: {result.err}]\n"
                     # self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
                     self.display_output(translated_output)
                 else:
@@ -502,4 +504,5 @@ class ShellSpeak:
                     #    self.command_history += f"Command Input: {user_input}\nCommand Output: {translated_output}\n"
                     #    self.display_output(translated_output)
                     #else:
+                    self.command_history += f"History: [Command Input: {user_input}\nCommand Output: {translated_command}]\n"
                     self.display_output(translated_command)
