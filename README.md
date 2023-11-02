@@ -4,8 +4,19 @@ ShellSpeak is an interactive command-line interface that enhances the terminal e
 
 ## Notice
 - This can and will delete files if you are not careful, I suggest you use this on a system you do not care about, or a emulator.
+- I only have developed and tested on windows, "should" work with other consoles, and on windows, OpenAI loves using *nix comments.
 - Feel free to look at what I have done, and please check back in a day or two.
-- I plan on Expananding on this README this is just a quick draft.
+- I plan on Expanding on this README this is just a quick draft.
+
+## Highlights
+- Works just like the console. (With pretty colors.)
+- Embed files into you commands by using "file: /filepath/" (where "/filepath/" is the path to your file, allows for multiple files.)
+- Uses past conversation history.
+- Checks your PATH for all available commands, and implies default OS commands.
+- Use plain text for commands i.e. "Go to folder Test"
+- The modules/llm.py file has our LLM class, that allows for offline (huggingface.co transformers) and OpenAI (gpt3/gpt4), and can be easily expanded on.
+
+(Files/History)
 
 ## Information
 
