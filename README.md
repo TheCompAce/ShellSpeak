@@ -3,7 +3,7 @@
 ShellSpeak is an interactive command-line interface that enhances the terminal experience by integrating AI-driven command translation and execution. The core functionality of ShellSpeak revolves around capturing user input, translating it to actionable shell commands through an AI model, and executing these commands while displaying the output in a styled and user-friendly manner.
 
 ## Notice
-- This is only a Start, I need to go to sleep, I hope to work on this some more, and clean and fix some things.
+- This can and will delete files if you are not careful, I suggest you use this on a ystem you do not care about, or a emulator.
 - Feel free to look at what I have done, and please check back in a day or two.
 - I plan on Expananding on this README this is just a quick draft.
 
