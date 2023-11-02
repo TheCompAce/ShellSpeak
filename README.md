@@ -54,8 +54,16 @@ Run the `ShellSpeak` script from the command line:
 python main.py
 ```
 
+Auto Run the `ShellSpeak` script from the command line:
+```bash
+python main.py /start
+```
+
+(We have a run.bat, and ai_cmd.bat (auto run), that builds a environment, and runs pip install -r requirements.txt)
+
+
 ## Contribute
-- Check our Disscussion on our [GitHub Discussion](https://github.com/TheCompAce/ShellSpeak/discussions)
+- Check our Discussion on our [GitHub Discussion](https://github.com/TheCompAce/ShellSpeak/discussions)
 - You can join to help build the code base, or to mod the GitHub. (I do have another job, this is mainly for learning.)
 - You can also donate (@BradfordBrooks79 on Venmo) if you want (I would love to do stuff like this full time.)
 
