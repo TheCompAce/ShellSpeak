@@ -24,6 +24,14 @@ ShellSpeak is an interactive command-line interface that enhances the terminal e
 
 The above diagram illustrates the architecture of ShellSpeak. It provides an in-depth look into how the program captures and processes user input to execute commands. We have recently added the capability to handle file inputs and to manage command history, enhancing the overall user experience.
 
+## ShellSpeak Commands
+- 'exit': to close ShellSpeak
+- 'user: /command/': pass a raw command to execute then reply threw the AI
+- 'file: /filepath/': adds file data to the command prompt. (can use multiple files, but will use the set token size for all files.)
+- 'clm': Clear command Memory
+- 'about': Shows the About Information
+- 'help': Shows this Help information.
+
 ## Setup
 
 1. Clone the repository:
