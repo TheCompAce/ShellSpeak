@@ -15,6 +15,7 @@ ShellSpeak is an interactive command-line interface that enhances the terminal e
 - Checks your PATH for all available commands, and implies default OS commands.
 - Use plain text for commands i.e. "Go to folder Test"
 - The modules/llm.py file has our LLM class, that allows for offline (huggingface.co transformers) and OpenAI (gpt3/gpt4), and can be easily expanded on.
+
 (Files/History/PATH commands, are set to set token limits that are can be adjusted, check modules/shellSpeak.py)
 
 ## Information
