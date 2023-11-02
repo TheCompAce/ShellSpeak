@@ -68,7 +68,6 @@ Runs with using the start menu, base on the settings.json that already exist.
 - the "prompt" values can be a string or a file path, if it is a file path then we use the file's data, this way we can have long prompts.
 - the llm.py has a cache system, but it is mainly for debugging, and seems not to work well, as commands tend to be the same, but do different things.
 
-Test 123
 
 ## Contribute
 - Check our Discussion on our [GitHub Discussion](https://github.com/TheCompAce/ShellSpeak/discussions)
