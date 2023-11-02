@@ -73,6 +73,11 @@ Runs with using the start menu, base on the settings.json that already exist.
 - You can join to help build the code base, or to mod the GitHub. (I do have another job, this is mainly for learning.)
 - You can also donate (@BradfordBrooks79 on Venmo) if you want (I would love to do stuff like this full time.)
 
+## Contact
+- First join our Discussion [GitHub Discussion](https://github.com/TheCompAce/ShellSpeak/discussions)
+- Then come join us over at [Reddit](https://www.reddit.com/r/ShellSpeak/)
+
+
 ## License
 
 ShellSpeak is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
