@@ -116,7 +116,7 @@ class LLM:
             else:
                 return f"Error: {response.status_code} - {response.json()}"
         else:
-            return f"Error: Timout calling OpenAI."
+            return f"Error: With reponse {response}."
 
     def _ask_mistral(self, system_prompt, user_prompt):
         if self.tokenizerObj is None or self.modelObj is None:
@@ -184,19 +184,22 @@ class LLM:
 
     def _setup_falcon_7b_instruct(self):
         if self.modelObj is None or self.tokenizerObj is None:
-            self.modelObj = AutoModelForCausalLM.from_pretrained("tiiuae/falcon-7b-instruct")
+            self.modelObj = AutoModelForCausalLM.from_pretrained("tiiuae/falcon-7b-instruct").to("cuda")
             self.tokenizerObj = AutoTokenizer.from_pretrained("tiiuae/falcon-7b-instruct")
+
+
 
     def _ask_falcon_7b_instruct(self, system_prompt, user_prompt):
         if self.tokenizerObj is None or self.modelObj is None:
             self._setup_falcon_7b_instruct()
+        device = 0  # This assumes that you have at least one GPU and it's device 0
         pipeline = transformers.pipeline(
             "text-generation",
             model=self.modelObj,
             tokenizer=self.tokenizerObj,
             torch_dtype=torch.bfloat16,
             trust_remote_code=True,
-            device_map="auto",
+            device=device,  # Specify the device here
         )
         sequences = pipeline(
             f"{system_prompt}\n{user_prompt}",
@@ -207,6 +210,7 @@ class LLM:
             eos_token_id=self.tokenizerObj.eos_token_id,
         )
         return sequences[0]['generated_text']
+
 
 
     def __repr__(self):
