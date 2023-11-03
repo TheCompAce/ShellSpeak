@@ -1,0 +1,63 @@
+Create image
+POST
+ 
+https://api.openai.com/v1/images/generations
+
+Creates an image given a prompt.
+
+Request body
+prompt
+string
+Required
+A text description of the desired image(s). The maximum length is 1000 characters.
+
+n
+integer or null
+Optional
+Defaults to 1
+The number of images to generate. Must be between 1 and 10.
+
+response_format
+string or null
+Optional
+Defaults to url
+The format in which the generated images are returned. Must be one of url or b64_json.
+
+size
+string or null
+Optional
+Defaults to 1024x1024
+The size of the generated images. Must be one of 256x256, 512x512, or 1024x1024.
+
+user
+string
+Optional
+A unique identifier representing your end-user, which can help OpenAI to monitor and detect abuse. Learn more.
+
+Returns
+Returns a list of image objects.
+
+Example request
+curl
+
+curl
+curl https://api.openai.com/v1/images/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "prompt": "A cute baby sea otter",
+    "n": 2,
+    "size": "1024x1024"
+  }'
+Response
+{
+  "created": 1589478378,
+  "data": [
+    {
+      "url": "https://..."
+    },
+    {
+      "url": "https://..."
+    }
+  ]
+}

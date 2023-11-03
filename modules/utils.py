@@ -209,6 +209,7 @@ def replace_placeholders(text, **kwargs):
 
 def read_file(filepath):
     try:
+        print(f"filepath = {filepath}")
         with open(filepath, 'r') as f:
             return f.read()
     except FileNotFoundError:
@@ -236,7 +237,7 @@ def get_file_size(filepath):
     try:
         return os.path.getsize(filepath)
     except FileNotFoundError:
-        return "File not found."
+        return 0
     except PermissionError:
         return "Permission denied."
     except Exception as e:

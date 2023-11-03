@@ -292,12 +292,14 @@ class ShellSpeak:
             total_data = ""
             files_data = []
             
+            
+
             for file in self.files:
                 file_data_content = read_file(file)  # Note: Changed to 'file_data_content'
                 file_data = {
                     "file": file,
                     "file_data": file_data_content,
-                    "file_size": get_file_size(file),
+                    "file_size": int(get_file_size(file)),
                     "file_tokens": get_token_count(file_data_content)  # Note: Changed to 'file_data_content'
                 }
                 
@@ -338,6 +340,14 @@ class ShellSpeak:
                     file_data['adjusted_tokens'] += extra_tokens
                     remaining_tokens -= extra_tokens
 
+            else:
+                for file_data in files_data:
+                    add_command_files_data = {
+                        "file:": file_data["file"],
+                        "data:": file_data["file_data"]
+                    }
+                    set_command_files_data.append(add_command_files_data)
+
             for file_data in new_files_data:
                 total_tokens += file_data["adjusted_tokens"]
                 add_command_files_data = {
@@ -346,6 +356,7 @@ class ShellSpeak:
                 }
 
                 set_command_files_data.append(add_command_files_data)
+        
 
         command_files_data = json.dumps(set_command_files_data)
 
@@ -371,6 +382,7 @@ class ShellSpeak:
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate use Command : {send_prompt}")
         command_output = self.llm.ask(send_prompt, user_input, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
+        print(json.dumps(command_output))
         logging.info(f"Translate return Response : {command_output}")
 
         if command_output == None:
