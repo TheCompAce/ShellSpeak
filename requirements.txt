@@ -4,3 +4,4 @@ spacy
 termcolor
 rich
 bs4
+faiss-cpu

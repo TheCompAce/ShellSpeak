@@ -109,8 +109,6 @@ class LLM:
                 response = e.response
                 tries -= 1
 
-        
-
         if response:
             if response.status_code == 200:
                 response_data = response.json()
@@ -119,7 +117,8 @@ class LLM:
                 print(f"response = {response.__dict__}")
                 return f"Error: {response.status_code} - {response.json()}"
         else:
-            return f"Error: Creating Reponse."
+            print(f"response = {response.__dict__}")
+            return f"Error: No Reponse."
 
     def _ask_mistral(self, system_prompt, user_prompt):
         if self.tokenizerObj is None or self.modelObj is None:

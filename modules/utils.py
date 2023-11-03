@@ -13,7 +13,7 @@ nlp = spacy.load("en_core_web_sm")
 
 def get_token_count(text):
     doc = nlp(text)
-    return len(doc)
+    return len(doc) * 2
 
 # Example usage:
 # text = "Hello, how are you?"
@@ -21,9 +21,29 @@ def get_token_count(text):
 # print(token_count)  # Output: 5
 
 def trim_to_token_count(text, max_tokens):
+    adjust_tokens = int(max_tokens / 2)
     doc = nlp(text)
-    trimmed_text = " ".join(token.text for token in doc[:max_tokens])
+    trimmed_text = " ".join(token.text for token in doc[:adjust_tokens])
     return trimmed_text
+
+def trim_to_right_token_count(text, max_tokens):
+    adjust_tokens = int(max_tokens / 2)
+    doc = nlp(text)
+    start = len(doc) - adjust_tokens if len(doc) > adjust_tokens else 0
+    trimmed_text = " ".join(token.text for token in doc[start:])
+    return trimmed_text
+
+def trim_to_mid_token_count(text, start, max_tokens):
+    adjust_tokens = int(max_tokens / 2)
+    doc = nlp(text)
+    # Ensure start is within bounds
+    start = max(0, min(len(doc) - 1, start))
+    end = start + adjust_tokens
+    # If max_tokens is more than the remaining tokens from start, adjust end
+    end = min(len(doc), end)
+    trimmed_text = " ".join(token.text for token in doc[start:end])
+    return trimmed_text
+
 
 def get_os_name():
     return platform.system()

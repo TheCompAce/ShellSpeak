@@ -9,7 +9,8 @@ import signal
 import base64
 
 from modules.llm import LLM, ModelTypes
-from modules.utils import get_file_size, get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_token_count, replace_placeholders
+from modules.utils import get_file_size, get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
+from modules.vectors import find_relevant_file_segments
 
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -21,11 +22,11 @@ class CommandResult:
 class ShellSpeak:
     def __init__(self, settings, base_path):
 
-        self.llm_len = int(settings.get("llm_size", 700))
-        self.llm_history_len = int(settings.get("llm_history_size", 300))
-        self.llm_file_len = int(settings.get("llm_file_size", 300))
+        self.llm_len = int(settings.get("llm_size", 4097))
+        self.llm_history_len = int(settings.get("llm_history_size", 2000))
+        self.llm_file_len = int(settings.get("llm_file_size", 2000))
 
-        self.llm_output_size = int(settings.get("llm_output_size", 700))
+        self.llm_output_size = int(settings.get("llm_output_size", 4097))
         self.use_cache = settings.get("use_cache", False)
         self.cache_file = settings.get("cache_file", None)
         self.settings = settings
@@ -268,13 +269,38 @@ class ShellSpeak:
         # Your logic here to find relevant information within the token count
         return file_data[:target_tokens]
 
+    def expand_directories(self, file_paths):
+        new_file_list = []
+        for file_path in file_paths:
+            if os.path.isdir(file_path):
+                # If the path is a directory, ask the user whether to include its files
+                user_decision = input(f"The path '{file_path}' is a directory. Do you want to add all files in this directory? (y/n): ")
+                if user_decision.lower() == 'y':
+                    # If yes, walk through the directory and add all files
+                    for root, dirs, files in os.walk(file_path):
+                        for name in files:
+                            new_file_list.append(os.path.join(root, name))
+                else:
+                    # If no, inform the user that the directory is being skipped
+                    print(f"Skipping directory '{file_path}'.")
+            else:
+                # If the path is a file, just add it to the list
+                new_file_list.append(file_path)
+        return new_file_list
+
+
     def translate_to_command(self, user_input):
+        send_prompt = self.settings['command_prompt']
+        max_llm = (self.llm_len - 80) #80 is used to padd json formating of System Messages and over all prompt size.
+        max_llm -= get_token_count(send_prompt)
+        max_llm -= get_token_count(user_input)
+        
         set_command_history = self.command_history
         token_count = get_token_count(set_command_history)
         if token_count > self.llm_history_len:
-            set_command_history = trim_to_token_count(set_command_history, self.llm_history_len)
+            set_command_history = trim_to_right_token_count(set_command_history, self.llm_history_len)
 
-        ext_tokens = token_count
+        ext_tokens = get_token_count(set_command_history)
 
         command_history = json.dumps(set_command_history)
 
@@ -287,13 +313,14 @@ class ShellSpeak:
         # Remove quotes from file paths, if present
         self.files = [fp.strip('"') for fp in file_paths]
 
+        # Use the new function to expand directories into file lists
+        self.files = self.expand_directories(self.files)
+
         if len(self.files) > 0:
             total_size = 0
             total_data = ""
             files_data = []
             
-            
-
             for file in self.files:
                 file_data_content = read_file(file)  # Note: Changed to 'file_data_content'
                 file_data = {
@@ -315,21 +342,33 @@ class ShellSpeak:
 
             remaining_tokens = self.llm_file_len
             new_files_data = []
-            
+            sized_fixed = False
             if total_tokens > self.llm_file_len:
+                print(f"File Trimming")
                 # Step 1: Reduce size of the largest files first
                 for file_data in files_data:
                     if remaining_tokens <= 0:
                         break
                     
                     if file_data['file_tokens'] > remaining_tokens:
-                        # Shrink this file data
-                        file_data['adjusted_tokens'] = remaining_tokens
+                        relevant_segments = find_relevant_file_segments(
+                            history_text=command_history,
+                            file_data=file_data['file_data'],
+                            window_size=8192, # or any other size you deem appropriate
+                            overlap=100,      # or any other overlap size you deem appropriate
+                            top_k=5           # or any other number of segments you deem appropriate
+                        )
+                        
+                        file_data['file_data'] = '/n.../n'.join(relevant_segments)  # Join the segments into a single string
+                        file_data['file_tokens'] = get_token_count(file_data['file_data'])
+                        file_data['adjusted_tokens'] = file_data['file_tokens']
                     else:
                         file_data['adjusted_tokens'] = file_data['file_tokens']
                     
                     remaining_tokens -= file_data['adjusted_tokens']
                     new_files_data.append(file_data)
+
+                    sized_fixed = True
 
                 # Step 2: Reclaim size for smaller files, if possible
                 for file_data in reversed(new_files_data):  # Start from smallest files
@@ -337,22 +376,29 @@ class ShellSpeak:
                         break
 
                     extra_tokens = min(file_data['file_tokens'] - file_data['adjusted_tokens'], remaining_tokens)
-                    file_data['adjusted_tokens'] += extra_tokens
+                    new_files_data['adjusted_tokens'] += extra_tokens
                     remaining_tokens -= extra_tokens
 
-            else:
-                for file_data in files_data:
-                    add_command_files_data = {
-                        "file:": file_data["file"],
-                        "data:": file_data["file_data"]
-                    }
-                    set_command_files_data.append(add_command_files_data)
+                files_data = new_files_data
 
-            for file_data in new_files_data:
-                total_tokens += file_data["adjusted_tokens"]
+            total_tokens = 0
+            for file_data in files_data:
+                if sized_fixed:
+                    total_tokens += file_data["adjusted_tokens"]
+                else:
+                    total_tokens += file_data["file_tokens"]
+
+                 # Check if the file_data is binary and encode it with base64 if so
+                try:
+                    # This will work if 'file_data' is text
+                    encoded_data = json.dumps(file_data['file_data'])
+                except TypeError:
+                    # If 'file_data' is binary, encode it with base64
+                    encoded_data = base64.b64encode(file_data['file_data']).decode('utf-8')
+
                 add_command_files_data = {
                     "file:": file_data["file"],
-                    "data:": trim_to_token_count(file_data["file_data"], file_data["adjusted_tokens"])
+                    "data:": encoded_data
                 }
 
                 set_command_files_data.append(add_command_files_data)
@@ -362,15 +408,15 @@ class ShellSpeak:
 
         ext_tokens += total_tokens
 
+
         commands = map_possible_commands()
         token_count = get_token_count(commands)
-        if token_count > (self.llm_len - ext_tokens):
-            commands = trim_to_token_count(commands, (self.llm_len - ext_tokens))
+        llm_left = (max_llm - ext_tokens)
+        if token_count > llm_left:
+            commands = trim_to_token_count(commands, llm_left)
         
             
         logging.info(f"Translate to Command : {user_input}")
-        send_prompt = self.settings['command_prompt']
-
         
 
         kwargs = {
@@ -382,12 +428,13 @@ class ShellSpeak:
         send_prompt = replace_placeholders(send_prompt, **kwargs)
         logging.info(f"Translate use Command : {send_prompt}")
         command_output = self.llm.ask(send_prompt, user_input, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
-        print(json.dumps(command_output))
         logging.info(f"Translate return Response : {command_output}")
 
         if command_output == None:
             command_output = "Error with Command AI sub system!"
-        if '```shell' in command_output:
+        elif len(command_output) > 5 and command_output[:5] == "TALK:":
+            command_output = command_output[5:]
+        elif '```shell' in command_output:
             tran_command = self.extract_shell_command(command_output)
             command_output = self.execute_shell_section(tran_command)
             if command_output.err != "":
@@ -450,23 +497,27 @@ class ShellSpeak:
 
     def translate_output(self, output):
         logging.info(f"Translate Output : {output}")
+        send_prompt = self.settings['display_prompt']
+        total_tokens = self.llm_output_size - (get_token_count(send_prompt) + get_token_count(output) + 80)
+
         set_command_history = self.command_history
         token_count = get_token_count(set_command_history)
-        if token_count > self.llm_history_len:
-            set_command_history = trim_to_token_count(set_command_history, self.llm_history_len)
 
-        ext_tokens = token_count
+        if token_count > total_tokens:
+            set_command_history = trim_to_right_token_count(set_command_history, total_tokens)
 
-        token_count = get_token_count(output)
-        if token_count > self.llm_output_size - ext_tokens:
-            output = trim_to_token_count(output, self.llm_output_size - ext_tokens)
+        # ext_tokens = token_count
 
-        send_prompt = self.settings['display_prompt']
+        # token_count = get_token_count(output)
+        # if token_count > self.llm_output_size - ext_tokens:
+        #    output = trim_to_token_count(output, self.llm_output_size - ext_tokens)
+
         kwargs = {
              'get_os_name': get_os_name(),
              'command_history': set_command_history
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
+
         logging.info(f"Translate Output Display Prompt : {send_prompt}")
         display_output = self.llm.ask(send_prompt, output, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
         logging.info(f"Translate Output Display Response : {display_output}")
