@@ -432,8 +432,8 @@ class ShellSpeak:
 
         if command_output == None:
             command_output = "Error with Command AI sub system!"
-        elif len(command_output) > 5 and command_output[:5] == "TALK:":
-            command_output = command_output[5:]
+        elif len(command_output) > 9 and command_output[:9] == "RESPONSE:":
+            command_output = command_output[9:].strip()
         elif '```shell' in command_output:
             tran_command = self.extract_shell_command(command_output)
             command_output = self.execute_shell_section(tran_command)
@@ -467,7 +467,9 @@ class ShellSpeak:
             logging.info(f"Translate Python Execute : {command_output}")
         elif '```plaintext' in command_output:
             command_output = self.extract_plain_text(command_output)            
-        else:
+        elif len(command_output) > 8 and command_output[:8] == "COMMAND:":
+            command_output = command_output[8:].strip()
+        
             success, command_output = self.execute_command(command_output)
             if not success:
                 print(f"Exe Error: {command_output.err}")
@@ -556,7 +558,7 @@ class ShellSpeak:
                     raw_command = user_input[6:]  # Extract the command part from user_input
                     result = self.run_command(raw_command)
                     translated_output = self.translate_output(result.out)
-                    self.command_history += f"History: [Command Input: {user_input}\nCommand Output: {result.out} Command Error: {result.err}]\n"
+                    self.command_history += f"History: [Input: {user_input}\nOutput: {result.out} Error: {result.err}]\n"
                     # self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
                     self.display_output(translated_output)
                 else:
@@ -567,5 +569,5 @@ class ShellSpeak:
                     #    self.command_history += f"Command Input: {user_input}\nCommand Output: {translated_output}\n"
                     #    self.display_output(translated_output)
                     #else:
-                    self.command_history += f"History: [Command Input: {user_input}\nCommand Output: {translated_command}]\n"
+                    self.command_history += f"History: [Input: {user_input}\nOutput: {translated_command}]\n"
                     self.display_output(translated_command)

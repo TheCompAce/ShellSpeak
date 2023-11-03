@@ -7,6 +7,8 @@ import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import requests
 
+transformers.logging.set_verbosity_error()
+
 from modules.responseCache import ResponseCache
 
 class ModelTypes(Enum):
