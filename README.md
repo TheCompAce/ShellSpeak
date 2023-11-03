@@ -7,8 +7,9 @@ ShellSpeak is an interactive command-line interface that enhances the terminal e
 - I only have developed and tested on windows, "should" work with other consoles, and on windows, OpenAI loves using *nix comments.
 - Feel free to look at what I have done, and please check back in a day or two.
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/a5bMRiIxkiU" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
 ## Highlights
+[ShellSpeak Demo](https://www.youtube.com/watch?v=a5bMRiIxkiU)
 - Works just like the console. (With pretty colors.)
 - Embed files into you commands by using "file: /filepath/" (where "/filepath/" is the path to your file, allows for multiple files.)
 - Uses past conversation history.
