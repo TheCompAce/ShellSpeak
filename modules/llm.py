@@ -101,7 +101,7 @@ class LLM:
         response = None
         while tries > 0:
             try:
-                response = requests.post(api_url, headers=headers, json=data, timeout=(2, 60))
+                response = requests.post(api_url, headers=headers, json=data, timeout=(2, 30))
                 tries = 0
             except requests.Timeout:
                 tries -= 1

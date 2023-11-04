@@ -8,33 +8,30 @@ from rich.console import Console
 
 console = Console()
 
+token_adjust = 2.5
+
 # Load English tokenizer, POS tagger, parser, NER and word vectors
 nlp = spacy.load("en_core_web_sm")
 
 def get_token_count(text):
     doc = nlp(text)
-    return len(doc) * 2.5
-
-# Example usage:
-# text = "Hello, how are you?"
-# token_count = get_token_count(text)
-# print(token_count)  # Output: 5
+    return int(len(doc) * token_adjust)
 
 def trim_to_token_count(text, max_tokens):
-    adjust_tokens = int(max_tokens / 2)
+    adjust_tokens = int(max_tokens / token_adjust)
     doc = nlp(text)
     trimmed_text = " ".join(token.text for token in doc[:adjust_tokens])
     return trimmed_text
 
 def trim_to_right_token_count(text, max_tokens):
-    adjust_tokens = int(max_tokens / 2)
+    adjust_tokens = int(max_tokens / token_adjust)
     doc = nlp(text)
     start = len(doc) - adjust_tokens if len(doc) > adjust_tokens else 0
     trimmed_text = " ".join(token.text for token in doc[start:])
     return trimmed_text
 
 def trim_to_mid_token_count(text, start, max_tokens):
-    adjust_tokens = int(max_tokens / 2)
+    adjust_tokens = int(max_tokens / token_adjust)
     doc = nlp(text)
     # Ensure start is within bounds
     start = max(0, min(len(doc) - 1, start))
@@ -93,70 +90,6 @@ def map_possible_commands():
     
     commands_str = ','.join(unique_commands)
     return commands_str
-
-def print_colored_text_old(text, end_newline=True):
-    """
-    Utility function to print colored and styled text to the console.
-    The text can contain special formatting tags like [bold], [italic], and [c:<color>].
-    Example: "[bold][c:green]Hello\n[c:magenta][italic]World!"
-    """
-    # Define color and style mappings
-    color_map = {
-        'red': 'red',
-        'green': 'green',
-        'yellow': 'yellow',
-        'blue': 'blue',
-        'magenta': 'magenta',
-        'cyan': 'cyan',
-        'white': 'white'
-    }
-    style_map = {
-        'bold': 'bold',
-        'underline': 'underline'
-    }
-    
-    # Initialize variables to hold the current color and styles
-    current_color = None
-    current_styles = []
-    
-    # Split the text by the [ tag to identify formatting commands
-    parts = text.split("[")
-    
-    # Initialize an empty string to hold the final styled text
-    styled_text = ""
-    
-    for part in parts:
-        if part.startswith("c:"):
-            # Set color
-            color_code = part[2:].split("]")[0]
-            current_color = color_map.get(color_code, None)
-        elif part.split("]")[0] in style_map:
-            # Add style
-            style_cmd = part.split("]")[0]
-            current_styles.append(style_map[style_cmd])
-        elif "]" in part:
-            # Reset styles or color
-            reset_cmds = part.split("]")
-            for cmd in reset_cmds:
-                if cmd == "reset":
-                    current_styles = []
-                    current_color = None
-                elif cmd == "nobold":
-                    current_styles.remove('bold')
-                elif cmd == "nounderline":
-                    current_styles.remove('underline')
-                elif cmd.startswith("c:"):
-                    # Reset color only
-                    current_color = None
-        else:
-            # This part is a text that needs to be styled
-            styled_text = colored(part, current_color, attrs=current_styles)
-            print(styled_text, end="", flush=True)  # flush stdout here
-    
-    # Print a newline character to end the line
-    if end_newline:
-        print()
-
 
 def print_colored_text(text, end_newline=True):
     end = "\n" if end_newline else ""
@@ -222,15 +155,6 @@ def replace_placeholders(text, **kwargs):
 
     # Use the re.sub() function to replace all occurrences of the pattern in the text
     return pattern.sub(replacement, text)
-
-# Example usage:
-# text = 'Return only commands listed in the {run_command_list} section for {get_os_name}\'s consoles.'
-# kwargs = {
-#     'run_command_list': '...',
-#     'get_os_name': 'Windows'
-# }
-# replaced_text = replace_placeholders(text, **kwargs)
-# print(replaced_text)
 
 def read_file(filepath):
     print(f"Reading file {filepath}.")

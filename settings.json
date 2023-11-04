@@ -2,6 +2,5 @@
     "command_prompt": "prompts/command.txt",
     "display_prompt": "prompts/display.txt",
     "user_command_prompt": "prompts/user_command.txt",
-    
     "model": "OpenAI"
 }

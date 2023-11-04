@@ -1,8 +1,11 @@
 ## Base System
 The User prompt contains the response from our {get_os_name} command.
 We want to format it using the "rpint" Text Styling.
-Ensure we make the response to follow our "Response Information"
+Ensure the response follows our "Response Information" guidelines.
 
 ## Response Information
-- Take the User prompt data and make it human readable, Ensure to use colors when needed, and often.
-- If the User prompt data is already human readable then just return the User prompt data.
+- Take the User prompt data and transform it into a human-readable format, employing colors where appropriate and frequently.
+- If the User prompt data is already in a human-readable format, simply return the User prompt data as-is.
+
+Verbosity Level:
+- Level 2: Be clear and precise, ensuring the response is formatted correctly and is easy to understand.

@@ -9,6 +9,7 @@ import logging
 import signal
 import base64
 import spacy
+from pygments import lexers
 
 from modules.llm import LLM, ModelTypes
 from modules.utils import get_file_size, get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
@@ -67,16 +68,14 @@ class ShellSpeak:
         print_colored_text(f"[yellow]==== {caption} ====")
         print_colored_text('[cyan]' + '\n'.join(body))
         print_colored_text("[yellow]====================")
-    
-    def extract_python_command(self, text):
-        match = re.search(r'```python(.*?)```', text, re.DOTALL)
-        if match:
-            shell_section = match.group(1).strip()
-        else:
-            logging.error("No shell section found")
-            shell_section = None
-        return shell_section
 
+    def detect_language(self, code):
+        try:
+            lexer = lexers.guess_lexer(code)
+            return lexer.name
+        except lexers.ClassNotFound:
+            return None
+    
     def execute_python_script(self, python_section):
         lines = python_section.split('\n')
         if len(lines) == 1:
@@ -110,42 +109,17 @@ class ShellSpeak:
             command = f'python -c "{script}"'
         result = self.run_command(command)
         return result.out + result.err
-
-    def extract_shell_command(self, text):
-        match = re.search(r'```shell(.*?)```', text, re.DOTALL)
-        if match:
-            shell_section = match.group(1).strip()
-        else:
-            logging.error("No shell section found")
-            shell_section = None
-        return shell_section
     
-    def extract_batch_command(self, text):
-        match = re.search(r'```batch(.*?)```', text, re.DOTALL)
+    def extract_script_command(self, script_type, text):
+        match = re.search(rf'```{script_type}(.*?)```', text, re.DOTALL)
         if match:
             shell_section = match.group(1).strip()
         else:
-            logging.error("No shell section found")
+            logging.error(f"No {script_type} section found")
             shell_section = None
+
         return shell_section
 
-    def extract_bash_command(self, text):
-        match = re.search(r'```bash(.*?)```', text, re.DOTALL)
-        if match:
-            shell_section = match.group(1).strip()
-        else:
-            logging.error("No shell section found")
-            shell_section = None
-        return shell_section
-    
-    def extract_plain_text(self, text):
-        match = re.search(r'```plaintext(.*?)```', text, re.DOTALL)
-        if match:
-            shell_section = match.group(1).strip()
-        else:
-            logging.error("No shell section found")
-            shell_section = None
-        return shell_section
     
     
 
@@ -336,7 +310,7 @@ class ShellSpeak:
                             history_text= user_input,
                             file_data=set_command_history,
                             window_size=self.llm_history_len, # or any other size you deem appropriate (8124)
-                            overlap=40,      # or any other overlap size you deem appropriate
+                            overlap=100,      # or any other overlap size you deem appropriate
                             top_k=1           # or any other number of segments you deem appropriate
                         )
                 set_command_history = '/n.../n'.join(relevant_segments)
@@ -344,6 +318,7 @@ class ShellSpeak:
                 set_command_history = trim_to_right_token_count(set_command_history, self.llm_history_len)
 
         max_llm -= get_token_count(set_command_history)
+
 
         command_history = json.dumps(set_command_history)
 
@@ -418,7 +393,7 @@ class ShellSpeak:
                             history_text=command_history + "\n"+ user_input,
                             file_data=new_file['file_data'],
                             window_size=new_file['file_tokens'], # or any other size you deem appropriate (8124)
-                            overlap=40,      # or any other overlap size you deem appropriate
+                            overlap=100,      # or any other overlap size you deem appropriate
                             top_k=1           # or any other number of segments you deem appropriate
                         )
                     new_file['file_data'] = '/n.../n'.join(relevant_segments)
@@ -450,25 +425,22 @@ class ShellSpeak:
 
         max_llm -= total_tokens
 
-
         commands = map_possible_commands()
         token_count = get_token_count(commands)
-        llm_left = max_llm
-        if token_count > llm_left:
+        if token_count > max_llm:
             if self.vector_for_commands:
                 relevant_segments = find_relevant_file_segments(
                             history_text=command_history + "\n"+ user_input,
                             file_data=commands,
-                            window_size=llm_left, # or any other size you deem appropriate (8124)
-                            overlap=40,      # or any other overlap size you deem appropriate
+                            window_size=max_llm, # or any other size you deem appropriate (8124)
+                            overlap=100,      # or any other overlap size you deem appropriate
                             top_k=1           # or any other number of segments you deem appropriate
                         )
                 commands = '/n.../n'.join(relevant_segments)
                 commands = commands.replace(' .exe', '.exe').replace(' .bat', '.bat').replace(' .com', '.com').replace(' .sh', '.sh')
             else:
-                commands = trim_to_token_count(commands, llm_left)
+                commands = trim_to_token_count(commands, max_llm)
         
-            
         logging.info(f"Translate to Command : {user_input}")
 
         kwargs = {
@@ -479,10 +451,11 @@ class ShellSpeak:
             'command_files_data': command_files_data
         }
         user_command_prompt = replace_placeholders(user_command_prompt, **kwargs)
+        system_command_prompt = replace_placeholders(send_prompt, **kwargs)
 
-        logging.info(f"Translate use System Prompt : {send_prompt}")
+        logging.info(f"Translate use System Prompt : {system_command_prompt}")
         logging.info(f"Translate use User Prompt : {user_command_prompt}")
-        command_output = self.llm.ask(send_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
+        command_output = self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
         logging.info(f"Translate return Response : {command_output}")
 
         if command_output == None:
@@ -491,7 +464,8 @@ class ShellSpeak:
             print(f"command_output = {command_output}")
             command_output = command_output[9:].strip()
         elif '```shell' in command_output:
-            tran_command = self.extract_shell_command(command_output)
+            print(f"command_output = {command_output}")
+            tran_command = self.extract_script_command("shell", command_output)
             command_output = self.execute_shell_section(tran_command)
             if command_output.err != "":
                 print(f"Shell Error: {command_output.out}")
@@ -500,7 +474,7 @@ class ShellSpeak:
                 command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```batch' in command_output:
-            tran_command = self.extract_batch_command(command_output)
+            tran_command = self.extract_script_command("batch", command_output)
             command_output = self.execute_shell_section(tran_command)
             if command_output.err != "":
                 print(f"Batch Error: {command_output.out}")
@@ -509,7 +483,7 @@ class ShellSpeak:
                 command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```bash' in command_output:
-            tran_command = self.extract_bash_command(command_output)
+            tran_command = self.extract_script_command("bash", command_output)
             command_output = self.execute_shell_section(tran_command)
             if command_output.err != "":
                 print(f"Bash Error: {command_output.out}")
@@ -518,11 +492,11 @@ class ShellSpeak:
                 command_output = command_output.out
             logging.info(f"Translate Shell Execute : {command_output}")
         elif '```python' in command_output:
-            tran_command = self.extract_python_command(command_output)
+            tran_command = self.extract_script_command("python", command_output)
             command_output = self.execute_python_script(tran_command)
             logging.info(f"Translate Python Execute : {command_output}")
         elif '```plaintext' in command_output:
-            command_output = self.extract_plain_text(command_output)            
+            tran_command = self.extract_script_command("plaintext", command_output)
         elif len(command_output) > 8 and command_output[:8] == "COMMAND:":
             command_output = command_output[8:].strip()
         
@@ -533,7 +507,9 @@ class ShellSpeak:
             else:
                 command_output = command_output.out
             logging.info(f"Translate Command Execute : {command_output}")
-        
+        else:
+            code_type = self.detect_language(command_output)
+            print(f"code_type = {code_type}")
 
         logging.info(f"Translate command output : {command_output}")
 
