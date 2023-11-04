@@ -81,7 +81,8 @@ class ShellSpeak:
         if len(lines) == 1:
             # Single-line script, execute directly
             script = lines[0]
-            return self.run_python_script(script)
+            output = self.run_python_script(script)
+            return output
         else:
             # Multi-line script, create a python file
             python_filename = 'temp.py'
@@ -108,7 +109,7 @@ class ShellSpeak:
         else:
             command = f'python -c "{script}"'
         result = self.run_command(command)
-        return result.out + result.err
+        return CommandResult(result.out, result.err)
     
     def extract_script_command(self, script_type, text):
         match = re.search(rf'```{script_type}(.*?)```', text, re.DOTALL)
@@ -316,8 +317,9 @@ class ShellSpeak:
                 set_command_history = '/n.../n'.join(relevant_segments)
             else:
                 set_command_history = trim_to_right_token_count(set_command_history, self.llm_history_len)
-
-        max_llm -= get_token_count(set_command_history)
+        history_tokens = get_token_count(set_command_history)
+        max_llm -= history_tokens
+        logging.info(f"Translate to Command History Token Count : {history_tokens}")
 
 
         command_history = json.dumps(set_command_history)
@@ -422,6 +424,7 @@ class ShellSpeak:
         
 
         command_files_data = json.dumps(set_command_files_data)
+        logging.info(f"Translate to Command File Token Count : {total_tokens}")
 
         max_llm -= total_tokens
 
@@ -441,6 +444,9 @@ class ShellSpeak:
             else:
                 commands = trim_to_token_count(commands, max_llm)
         
+        command_tokens = get_token_count(commands)
+        logging.info(f"Translate to Command File Token Count : {command_tokens}")
+        
         logging.info(f"Translate to Command : {user_input}")
 
         kwargs = {
@@ -453,6 +459,11 @@ class ShellSpeak:
         user_command_prompt = replace_placeholders(user_command_prompt, **kwargs)
         system_command_prompt = replace_placeholders(send_prompt, **kwargs)
 
+        user_tokens = get_token_count(user_command_prompt)
+        system_tokens = get_token_count(system_command_prompt)
+        logging.info(f"Translate to Command User Token Count : {user_tokens}")
+        logging.info(f"Translate to Command System Token Count : {system_tokens}")
+
         logging.info(f"Translate use System Prompt : {system_command_prompt}")
         logging.info(f"Translate use User Prompt : {user_command_prompt}")
         command_output = self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
@@ -463,40 +474,6 @@ class ShellSpeak:
         elif len(command_output) > 9 and command_output[:9] == "RESPONSE:":
             print(f"command_output = {command_output}")
             command_output = command_output[9:].strip()
-        elif '```shell' in command_output:
-            print(f"command_output = {command_output}")
-            tran_command = self.extract_script_command("shell", command_output)
-            command_output = self.execute_shell_section(tran_command)
-            if command_output.err != "":
-                print(f"Shell Error: {command_output.out}")
-                command_output = command_output.err
-            else:    
-                command_output = command_output.out
-            logging.info(f"Translate Shell Execute : {command_output}")
-        elif '```batch' in command_output:
-            tran_command = self.extract_script_command("batch", command_output)
-            command_output = self.execute_shell_section(tran_command)
-            if command_output.err != "":
-                print(f"Batch Error: {command_output.out}")
-                command_output = command_output.err
-            else:
-                command_output = command_output.out
-            logging.info(f"Translate Shell Execute : {command_output}")
-        elif '```bash' in command_output:
-            tran_command = self.extract_script_command("bash", command_output)
-            command_output = self.execute_shell_section(tran_command)
-            if command_output.err != "":
-                print(f"Bash Error: {command_output.out}")
-                command_output = command_output.err
-            else:
-                command_output = command_output.out
-            logging.info(f"Translate Shell Execute : {command_output}")
-        elif '```python' in command_output:
-            tran_command = self.extract_script_command("python", command_output)
-            command_output = self.execute_python_script(tran_command)
-            logging.info(f"Translate Python Execute : {command_output}")
-        elif '```plaintext' in command_output:
-            tran_command = self.extract_script_command("plaintext", command_output)
         elif len(command_output) > 8 and command_output[:8] == "COMMAND:":
             command_output = command_output[8:].strip()
         
@@ -508,10 +485,82 @@ class ShellSpeak:
                 command_output = command_output.out
             logging.info(f"Translate Command Execute : {command_output}")
         else:
-            code_type = self.detect_language(command_output)
-            print(f"code_type = {code_type}")
+            check_list = ["shell", "batch", "bash", "python"]
+            multi_scripts = []
+            for check in check_list:
+                # Create a regex pattern based on the current check
+                pattern = re.compile(f'```{check}(.*?)```', re.DOTALL)
+                
+                # Find all occurrences of the pattern in command_output
+                for match in pattern.finditer(command_output):
+                    # Extract the matched script content
+                    script_content = match.group(1)
+                    
+                    # Assuming self.check_script processes the script content
+                    #check_command_output = self.check_script(check, script_content)
+                    check_command_output = script_content
+                    
+                    add_match = {
+                        "check": check,
+                        "check_command": check_command_output
+                    }
+                    
+                    multi_scripts.append(add_match)
+
+            canceled = False
+            if len(multi_scripts) > 0:
+                if len(multi_scripts) > 1:
+                    while True:
+                        print_colored_text(f"[yellow]===== Base Command =====\n[white]{command_output}\n[yellow]========================")
+                        print_colored_text(f"[yellow]Found {len(multi_scripts)} diffrent scripts in the response")
+                        for m, multi_script in enumerate(multi_scripts):
+                            print(f"{m + 1} : {multi_script['check']}")
+                        
+                        print(f"{len(multi_scripts) + 1} : Cancel")
+                        get_check = capture_styled_input("[yellow]Select the type of script you want to run: ")
+
+                        if get_check.isdigit:
+                            get_check = int(get_check)
+                            if get_check != len(multi_scripts) + 1 and get_check > 0 and get_check <= len(multi_scripts):
+                                command_output = multi_scripts[get_check - 1]["check_command"]
+                                break
+                            elif get_check == len(multi_scripts) + 1:
+                                canceled = True
+                                break
+                else:
+                    command_output = multi_scripts[0]["check_command"]
+
+            else:
+                code_type = self.detect_language(command_output)
+                if code_type == "Python":
+                   check = "python"
+                else:
+                   print(f"code_type = {code_type}")
+                   canceled = True
+        
+            if not canceled:
+                if check == "shell" or check == "batch" or check == "bash":
+                    command_output = self.execute_shell_section(command_output)
+                else:
+                    command_output = self.execute_python_script(command_output)
+
+                if command_output.err != "":
+                    print(f"Shell Error: {command_output.out}")
+                    command_output = command_output.err
+                else:    
+                    command_output = command_output.out
+
+                logging.info(f"Translate Shell Execute : {command_output}")
 
         logging.info(f"Translate command output : {command_output}")
+
+        return command_output
+    
+    def check_script(self, code_type, text):
+        command_output = text
+        if f'```{code_type}' in text:
+            command_output = self.extract_script_command(code_type, text)
+            logging.info(f"Translate '{code_type}' Code : {text}")
 
         return command_output
 
