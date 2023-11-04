@@ -1,4 +1,5 @@
 # Import necessary modules
+import datetime
 import json
 import os
 import platform
@@ -32,6 +33,10 @@ class ShellSpeak:
         self.llm_output_size = int(settings.get("llm_output_size", 4097))
         self.use_cache = settings.get("use_cache", False)
         self.cache_file = settings.get("cache_file", None)
+
+        self.vector_for_commands = settings.get("vector_for_commands", False)
+        self.vector_for_history = settings.get("vector_for_history", True)
+
         self.settings = settings
         self.command_history = ""
         self.settingsRoot = base_path
@@ -225,6 +230,9 @@ class ShellSpeak:
                 new_dir = lines[-1]  # Assuming the last line of output contains the new working directory
                 if os.path.isdir(new_dir):
                     os.chdir(new_dir)  # Change to the new working directory in your parent process
+                    # Remove the last line containing the new directory from the output
+                    lines = lines[:-1]
+                    stdout = '\n'.join(lines)
                 else:
                     logging.error(f"Invalid directory: {new_dir}")
             else:
@@ -312,6 +320,9 @@ class ShellSpeak:
 
 
     def translate_to_command(self, user_input):
+        user_command_prompt = self.settings['user_command_prompt']
+        
+
         send_prompt = self.settings['command_prompt']
         max_llm = (self.llm_len - 80) #80 is used to padd json formating of System Messages and over all prompt size.
         max_llm -= get_token_count(send_prompt)
@@ -320,7 +331,17 @@ class ShellSpeak:
         set_command_history = self.command_history
         token_count = get_token_count(set_command_history)
         if token_count > self.llm_history_len:
-            set_command_history = trim_to_right_token_count(set_command_history, self.llm_history_len)
+            if self.vector_for_history:
+                relevant_segments = find_relevant_file_segments(
+                            history_text= user_input,
+                            file_data=set_command_history,
+                            window_size=self.llm_history_len, # or any other size you deem appropriate (8124)
+                            overlap=40,      # or any other overlap size you deem appropriate
+                            top_k=1           # or any other number of segments you deem appropriate
+                        )
+                set_command_history = '/n.../n'.join(relevant_segments)
+            else:
+                set_command_history = trim_to_right_token_count(set_command_history, self.llm_history_len)
 
         max_llm -= get_token_count(set_command_history)
 
@@ -436,26 +457,40 @@ class ShellSpeak:
         token_count = get_token_count(commands)
         llm_left = max_llm
         if token_count > llm_left:
-            commands = trim_to_token_count(commands, llm_left)
+            if self.vector_for_commands:
+                relevant_segments = find_relevant_file_segments(
+                            history_text=command_history + "\n"+ user_input,
+                            file_data=commands,
+                            window_size=llm_left, # or any other size you deem appropriate (8124)
+                            overlap=40,      # or any other overlap size you deem appropriate
+                            top_k=1           # or any other number of segments you deem appropriate
+                        )
+                commands = '/n.../n'.join(relevant_segments)
+                commands = commands.replace(' .exe', '.exe').replace(' .bat', '.bat').replace(' .com', '.com').replace(' .sh', '.sh')
+            else:
+                commands = trim_to_token_count(commands, llm_left)
         
             
         logging.info(f"Translate to Command : {user_input}")
-        
 
         kwargs = {
-             'get_os_name': get_os_name(),
-             'commands': commands,
-             'command_history': command_history,
-             'command_files_data': command_files_data
+            'user_prompt': user_input,
+            'get_os_name': get_os_name(),
+            'commands': commands,
+            'command_history': command_history,
+            'command_files_data': command_files_data
         }
-        send_prompt = replace_placeholders(send_prompt, **kwargs)
-        logging.info(f"Translate use Command : {send_prompt}")
-        command_output = self.llm.ask(send_prompt, user_input, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
+        user_command_prompt = replace_placeholders(user_command_prompt, **kwargs)
+
+        logging.info(f"Translate use System Prompt : {send_prompt}")
+        logging.info(f"Translate use User Prompt : {user_command_prompt}")
+        command_output = self.llm.ask(send_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
         logging.info(f"Translate return Response : {command_output}")
 
         if command_output == None:
             command_output = "Error with Command AI sub system!"
         elif len(command_output) > 9 and command_output[:9] == "RESPONSE:":
+            print(f"command_output = {command_output}")
             command_output = command_output[9:].strip()
         elif '```shell' in command_output:
             tran_command = self.extract_shell_command(command_output)
@@ -553,10 +588,10 @@ class ShellSpeak:
         print_colored_text(output)
 
     def display_about(self):
-        print_colored_text("[bold][yellow]ShellSpeak\n======================================================\n[white]AI powered Console Input\nVisit: https://github.com/TheCompAce/ShellSpeak\nDonate: @BradfordBrooks79 on Venmo\n\n[grey]Tip: Type 'help' for Help.\n[yellow]======================================================\n")
+        print_colored_text("[bold][yellow]======================================================\nShellSpeak\n======================================================\n[white]AI powered Console Input\nVisit: https://github.com/TheCompAce/ShellSpeak\nDonate: @BradfordBrooks79 on Venmo\n\n[grey]Tip: Type 'help' for Help.\n[yellow]======================================================\n")
 
     def display_help(self):
-        print_colored_text("[bold][yellow]ShellSpeak Help\n======================================================\n[white]Type:\n'exit': to close ShellSpeak\n'user: /command/': pass a raw command to execute then reply threw the AI\n'file: /filepath/': adds file data to the command prompt.\n'clm': Clear command Memory\n'about': Shows the About Information\n'help': Shows this Help information.\n[yellow]======================================================\n")
+        print_colored_text("[bold][yellow]======================================================\nShellSpeak Help\n======================================================\n[white]Type:\n'exit': to close ShellSpeak\n'user: /command/': pass a raw command to execute then reply threw the AI\n'file: /filepath/': adds file data to the command prompt. (use can send a folder path, using ',' to exclude folders and files.)\n'clm': Clear command Memory\n'about': Shows the About Information\n'help': Shows this Help information.\n[yellow]======================================================\n")
 
     def run(self):
         self.display_about()
@@ -576,12 +611,13 @@ class ShellSpeak:
                 # self.command_history += f"Command Input: {user_input}\nCommand Output: Command History cleared.\n"
                 self.display_output(f"Command Memory cleared")
             else:
+                timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 if user_input.lower().startswith('user: '):
                     # Bypass AI translation and send raw command to the OS
                     raw_command = user_input[6:]  # Extract the command part from user_input
                     result = self.run_command(raw_command)
                     translated_output = self.translate_output(result.out)
-                    self.command_history += f"History: [Input: {user_input}\nOutput: {result.out} Error: {result.err}]\n"
+                    self.command_history += f"History: [Time: {timestamp}\nInput: {user_input}\nOutput: {result.out} Error: {result.err}]\n"
                     # self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
                     self.display_output(translated_output)
                 else:
@@ -592,5 +628,6 @@ class ShellSpeak:
                     #    self.command_history += f"Command Input: {user_input}\nCommand Output: {translated_output}\n"
                     #    self.display_output(translated_output)
                     #else:
-                    self.command_history += f"History: [Input: {user_input}\nOutput: {translated_command}]\n"
+                    
+                    self.command_history += f"History: [Time: {timestamp}\nInput: {user_input}\nOutput: {translated_command}]\n"
                     self.display_output(translated_command)

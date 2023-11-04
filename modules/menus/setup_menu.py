@@ -26,17 +26,20 @@ def setup_menu():
     # Setup menu loop
     while True:
         print("\nSetup Menu:")
-        print("1. Command Prompt")
+        print("1. System Prompt")
+        print("2. User Prompt")
         print("2. Display Prompt")
         print("3. Back to Main Menu")
         
         choice = input("Choose an option: ")
         
         if choice == '1':
-            settings['command_prompt'] = input("Enter the Command Prompt (or File Path): ")
+            settings['command_prompt'] = input("Enter the System Prompt (or File Path): ")
         elif choice == '2':
-            settings['display_prompt'] = input("Enter the Display Prompt (or File Path): ")
+            settings['user_command_prompt'] = input("Enter the User Prompt (or File Path): ")
         elif choice == '3':
+            settings['display_prompt'] = input("Enter the Display Prompt (or File Path): ")        
+        elif choice == '4':
             print("Returning to Main Menu.")
             break
         else:

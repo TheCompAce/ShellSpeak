@@ -13,7 +13,7 @@ nlp = spacy.load("en_core_web_sm")
 
 def get_token_count(text):
     doc = nlp(text)
-    return len(doc) * 2
+    return len(doc) * 2.5
 
 # Example usage:
 # text = "Hello, how are you?"
@@ -62,7 +62,7 @@ def map_possible_commands():
     unique_commands = set()
     
     # List of wanted file extensions for Windows
-    windows_wanted_extensions = ['.exe', '.bat']
+    windows_wanted_extensions = ['.exe', '.bat', '.com', '.sh']
     
     for directory in directories:
         try:
@@ -183,6 +183,11 @@ def load_settings(filepath):
             if os.path.isfile(chk_file):
                 with open(chk_file, 'r') as f:
                     settings['display_prompt'] = f.read()
+
+            chk_file = os.path.join(filepath, settings['user_command_prompt'])
+            if os.path.isfile(chk_file):
+                with open(chk_file, 'r') as f:
+                    settings['user_command_prompt'] = f.read()
 
         return settings
     except FileNotFoundError:

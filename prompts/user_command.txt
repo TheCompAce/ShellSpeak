@@ -1,0 +1,24 @@
+## User Setup:
+"System Variables" is used to help guide you for information.
+- "operating_system" is used to Id the system you need to make Commands/Scripts for.
+- "run_command_list" holds the Commands, on top of the default commands for {get_os_name}.
+- "command_list_history" holds our history of our chat ("History" is a Chat Item, in that "Time" is the time, "Input" is what the user asked, and "Output" is your response.)
+- "command_files" is the list of files, and dat that might help you with our request.
+
+## System Variables:
+###
+{
+    "operating_system": '{get_os_name}',
+    "run_command_list" : {
+        "{commands}"
+    },
+    "command_list_history" : {
+        {command_history}
+    }
+    "command_files": {
+        {command_files_data}
+    }
+}
+
+## User Request
+{user_prompt}
