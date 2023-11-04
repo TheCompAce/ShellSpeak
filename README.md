@@ -28,7 +28,7 @@ The above diagram illustrates the architecture of ShellSpeak. It provides an in-
 ## ShellSpeak Commands
 - 'exit': to close ShellSpeak
 - 'user: /command/': pass a raw command to execute then reply threw the AI
-- 'file: /filepath/': adds file data to the command prompt. (can use multiple files, but will use the set token size for all files.)
+- 'file: /filepath/': adds file data to the command prompt. (can use multiple files, but will use the set token size for all files, files are also limited to 1,000,000 characters, due to calculating tokens. When trimming files we use Vector Matching, hopping to get relevant data from large data files.)
 - 'clm': Clear command Memory
 - 'about': Shows the About Information
 - 'help': Shows this Help information.

@@ -7,11 +7,14 @@ import subprocess
 import logging
 import signal
 import base64
+import spacy
 
 from modules.llm import LLM, ModelTypes
 from modules.utils import get_file_size, get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
 from modules.vectors import find_relevant_file_segments
 
+
+nlp = spacy.load("en_core_web_sm")
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class CommandResult:
@@ -259,17 +262,31 @@ class ShellSpeak:
         except Exception as e:
             logging.error(f"Error in handle_input: {e}")
 
-    def shrink_file_data(file_data, target_tokens):
-        # Your logic here to shrink the file data to target_tokens
-        # For now, we'll just truncate the data
-        truncated_data = file_data[:target_tokens]
-        return truncated_data
+    def shrink_file_data(self, file_data, target_tokens):
+        if len(file_data) > nlp.max_length:
+            file_data = file_data[:len(file_data) - nlp.max_length]
+
+        # Get the current token count of file_data
+        current_tokens = get_token_count(file_data)
+
+        if current_tokens > target_tokens:
+            # Estimate the number of characters to keep based on the average token length
+            average_token_length = len(file_data) / current_tokens
+            chars_to_keep = int(target_tokens * average_token_length)
+            
+            # Only keep the last part of file_data
+            truncated_data = file_data[-chars_to_keep:]
+            return truncated_data
+
+        # If the file_data is already within the limit, return it as is
+        return file_data
+
 
     def find_relevant_data(file_data, target_tokens):
         # Your logic here to find relevant information within the token count
         return file_data[:target_tokens]
 
-    def expand_directories(self, file_paths):
+    def expand_directories(self, file_paths, exclusions):
         new_file_list = []
         for file_path in file_paths:
             if os.path.isdir(file_path):
@@ -278,15 +295,20 @@ class ShellSpeak:
                 if user_decision.lower() == 'y':
                     # If yes, walk through the directory and add all files
                     for root, dirs, files in os.walk(file_path):
+                        # Remove excluded directories so os.walk doesn't traverse them
+                        dirs[:] = [d for d in dirs if d not in exclusions]
                         for name in files:
-                            new_file_list.append(os.path.join(root, name))
+                            if name not in exclusions:
+                                new_file_list.append(os.path.join(root, name))
                 else:
                     # If no, inform the user that the directory is being skipped
                     print(f"Skipping directory '{file_path}'.")
             else:
                 # If the path is a file, just add it to the list
-                new_file_list.append(file_path)
+                if os.path.basename(file_path) not in exclusions:
+                    new_file_list.append(file_path)
         return new_file_list
+
 
 
     def translate_to_command(self, user_input):
@@ -300,21 +322,29 @@ class ShellSpeak:
         if token_count > self.llm_history_len:
             set_command_history = trim_to_right_token_count(set_command_history, self.llm_history_len)
 
-        ext_tokens = get_token_count(set_command_history)
+        max_llm -= get_token_count(set_command_history)
 
         command_history = json.dumps(set_command_history)
 
         set_command_files_data = []
         total_tokens = 0
 
-        # Extract file paths from user_input
+        # Extract file paths and exclusion list from user_input
         file_paths = re.findall(r'file:\s*(".*?"|\S+)', user_input)
         
         # Remove quotes from file paths, if present
         self.files = [fp.strip('"') for fp in file_paths]
+        for f, file in enumerate(self.files):
+            exclusions = file.split(',')
+            file_path = exclusions[0]
 
-        # Use the new function to expand directories into file lists
-        self.files = self.expand_directories(self.files)
+            exclusions.pop(0)
+            self.files[f] = file_path
+            self.exclusions = exclusions
+            self.files = self.expand_directories(self.files, self.exclusions)
+
+            # Use the new function to expand directories into file lists
+            self.files = self.expand_directories(self.files, self.exclusions)
 
         if len(self.files) > 0:
             total_size = 0
@@ -323,6 +353,9 @@ class ShellSpeak:
             
             for file in self.files:
                 file_data_content = read_file(file)  # Note: Changed to 'file_data_content'
+                if len(file_data_content) > nlp.max_length:
+                    file_data_content = file_data_content[:len(file_data_content) - nlp.max_length]
+
                 file_data = {
                     "file": file,
                     "file_data": file_data_content,
@@ -341,52 +374,42 @@ class ShellSpeak:
             files_data = sorted(files_data, key=lambda x: x['file_tokens'], reverse=True)
 
             remaining_tokens = self.llm_file_len
+            remaining_tokens_split = int(remaining_tokens / len(files_data)) + 1
             new_files_data = []
-            sized_fixed = False
-            if total_tokens > self.llm_file_len:
-                print(f"File Trimming")
-                # Step 1: Reduce size of the largest files first
-                for file_data in files_data:
-                    if remaining_tokens <= 0:
-                        break
+            for f, file in enumerate(files_data):
+                if file["file_tokens"] > remaining_tokens_split:
+                    file["fileIndex"] = f
+                    file["file_tokens"] = remaining_tokens_split
+                    new_files_data.append(file)
+                else:
+                    remaining_tokens -= file["file_tokens"]
+                    div_val = (len(files_data) - (len(files_data) -  len(new_files_data)))
+                    if div_val == 0:
+                        div_val = 1
+
+                    remaining_tokens_split = int(remaining_tokens / div_val)
                     
-                    if file_data['file_tokens'] > remaining_tokens:
-                        relevant_segments = find_relevant_file_segments(
-                            history_text=command_history,
-                            file_data=file_data['file_data'],
-                            window_size=8192, # or any other size you deem appropriate
-                            overlap=100,      # or any other overlap size you deem appropriate
-                            top_k=5           # or any other number of segments you deem appropriate
+            # remaining_tokens = self.llm_file_len
+            # remaining_tokens_split = int(remaining_tokens / len(files_data)) + 1
+
+            if len(new_files_data) > 0:
+                for new_file in new_files_data:
+                    print(f"File {new_file['file']} Trimming")
+                    relevant_segments = find_relevant_file_segments(
+                            history_text=command_history + "\n"+ user_input,
+                            file_data=new_file['file_data'],
+                            window_size=new_file['file_tokens'], # or any other size you deem appropriate (8124)
+                            overlap=40,      # or any other overlap size you deem appropriate
+                            top_k=1           # or any other number of segments you deem appropriate
                         )
-                        
-                        file_data['file_data'] = '/n.../n'.join(relevant_segments)  # Join the segments into a single string
-                        file_data['file_tokens'] = get_token_count(file_data['file_data'])
-                        file_data['adjusted_tokens'] = file_data['file_tokens']
-                    else:
-                        file_data['adjusted_tokens'] = file_data['file_tokens']
-                    
-                    remaining_tokens -= file_data['adjusted_tokens']
-                    new_files_data.append(file_data)
+                    new_file['file_data'] = '/n.../n'.join(relevant_segments)
+                    new_file['file_tokens'] = get_token_count(new_file['file_data'])
 
-                    sized_fixed = True
-
-                # Step 2: Reclaim size for smaller files, if possible
-                for file_data in reversed(new_files_data):  # Start from smallest files
-                    if remaining_tokens <= 0:
-                        break
-
-                    extra_tokens = min(file_data['file_tokens'] - file_data['adjusted_tokens'], remaining_tokens)
-                    new_files_data['adjusted_tokens'] += extra_tokens
-                    remaining_tokens -= extra_tokens
-
-                files_data = new_files_data
+                    files_data[new_file["fileIndex"]] = new_file
 
             total_tokens = 0
             for file_data in files_data:
-                if sized_fixed:
-                    total_tokens += file_data["adjusted_tokens"]
-                else:
-                    total_tokens += file_data["file_tokens"]
+                total_tokens += file_data["file_tokens"]
 
                  # Check if the file_data is binary and encode it with base64 if so
                 try:
@@ -406,12 +429,12 @@ class ShellSpeak:
 
         command_files_data = json.dumps(set_command_files_data)
 
-        ext_tokens += total_tokens
+        max_llm -= total_tokens
 
 
         commands = map_possible_commands()
         token_count = get_token_count(commands)
-        llm_left = (max_llm - ext_tokens)
+        llm_left = max_llm
         if token_count > llm_left:
             commands = trim_to_token_count(commands, llm_left)
         

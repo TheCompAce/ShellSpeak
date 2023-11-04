@@ -228,8 +228,8 @@ def replace_placeholders(text, **kwargs):
 # print(replaced_text)
 
 def read_file(filepath):
+    print(f"Reading file {filepath}.")
     try:
-        print(f"filepath = {filepath}")
         with open(filepath, 'r') as f:
             return f.read()
     except FileNotFoundError:
