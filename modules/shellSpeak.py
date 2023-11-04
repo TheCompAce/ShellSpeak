@@ -389,8 +389,6 @@ class ShellSpeak:
 
                 files_data.append(file_data)
 
-            total_tokens = get_token_count(total_data)
-
             # Sort files_data by file_tokens in descending order
             files_data = sorted(files_data, key=lambda x: x['file_tokens'], reverse=True)
 
