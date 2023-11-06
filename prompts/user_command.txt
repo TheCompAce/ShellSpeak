@@ -4,6 +4,7 @@
 - "run_command_list" holds the Commands, on top of the default commands for {get_os_name}.
 - "command_list_history" holds our history of our chat ("History" is a Chat Item, in that "Time" is the time, "Input" is what the user asked, and "Output" is your response.)
 - "command_files" is the list of files, and dat that might help you with our request.
+- if "User Request" is empty then reply with a joke.
 
 ## System Variables:
 ###
@@ -14,7 +15,7 @@
     },
     "command_list_history" : {
         {command_history}
-    }
+    },
     "command_files": {
         {command_files_data}
     }

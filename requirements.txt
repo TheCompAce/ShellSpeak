@@ -5,3 +5,4 @@ termcolor
 rich
 bs4
 faiss-cpu
+aioconsole

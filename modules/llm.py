@@ -6,10 +6,16 @@ import torch
 import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import requests
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 transformers.logging.set_verbosity_error()
 
 from modules.responseCache import ResponseCache
+
+executor = ThreadPoolExecutor()
+
+
 
 class ModelTypes(Enum):
     OpenAI = "OpenAI"
@@ -42,6 +48,11 @@ class LLM:
             return self._setup_zephyr_7b()
         elif self.model == ModelTypes.Zephyr7bBeta:
             return self._setup_zephyr_7bB()
+
+    async def async_ask(llm, system_prompt, user_prompt, model_type=None):
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(executor, llm.ask, system_prompt, user_prompt, model_type)
+        return response
 
     def ask(self, system_prompt, user_prompt, model_type=None):
         if self.use_cache:
@@ -99,28 +110,35 @@ class LLM:
 
         tries = 2
         response = None
+        is_error = False
         while tries > 0:
             try:
-                response = requests.post(api_url, headers=headers, json=data, timeout=(2, 30))
+                response = requests.post(api_url, headers=headers, json=data, timeout=(2, 60))
                 tries = 0
             except requests.Timeout:
                 tries -= 1
                 if tries == 0:
+                    is_error = True
                     response = "Timeout"
             except requests.exceptions.RequestException as e:
+                is_error = True
                 response = e.response
                 tries -= 1
 
         if response:
-            if response.status_code == 200:
-                response_data = response.json()
-                return response_data["choices"][0]["message"]["content"]
+            if not is_error:
+                if response.status_code == 200:
+                    response_data = response.json()
+                    return response_data["choices"][0]["message"]["content"]
+                else:
+                    print(f"response = {response.__dict__}")
+                    return f"Error (_ask_openai): {response.status_code} - {response.json()}"
             else:
-                print(f"response = {response.__dict__}")
-                return f"Error: {response.status_code} - {response.json()}"
+                print(f"response = {response}")
+                return f"Error (_ask_openai): {response}"
         else:
             print(f"response = {response.__dict__}")
-            return f"Error: No Reponse."
+            return f"Error (_ask_openai): No Reponse."
 
     def _ask_mistral(self, system_prompt, user_prompt):
         if self.tokenizerObj is None or self.modelObj is None:

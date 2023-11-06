@@ -1,13 +1,21 @@
 import json
 import os
 import sys
+import asyncio
 
 from modules.menus.setup_menu import setup_menu
 from modules.shellSpeak import ShellSpeak
 from modules.utils import load_settings
 
+def run_async_function(func, *args):
+    asyncio.run(func(*args))
 
+async def start_shell_speak(settings, base_path):    
+    await main_start(settings, base_path)
 
+async def main_start(settings, base_path):
+    shellSpeak = ShellSpeak(settings, base_path)
+    await shellSpeak.run()
 
 def main():
     base_path = os.path.abspath(".")
@@ -15,8 +23,7 @@ def main():
 
     # Check for command-line arguments
     if len(sys.argv) > 1 and sys.argv[1] == '/start':
-        shellSpeak = ShellSpeak(settings, base_path)
-        shellSpeak.run()
+        run_async_function(start_shell_speak, settings, base_path)
         return
     
     # Display menu
@@ -33,8 +40,7 @@ def main():
         if choice == '1':
             setup_menu()
         elif choice == '2':
-            shellSpeak = ShellSpeak(settings, base_path)
-            shellSpeak.run()
+            run_async_function(start_shell_speak, settings, base_path)
             break
         elif choice == '3':
             print("Exiting.")

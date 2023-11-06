@@ -6,6 +6,9 @@ import spacy
 import re
 from rich.console import Console
 
+from functools import partial
+from multiprocessing import Pool, TimeoutError
+
 console = Console()
 
 token_adjust = 2.5
@@ -121,6 +124,11 @@ def load_settings(filepath):
             if os.path.isfile(chk_file):
                 with open(chk_file, 'r') as f:
                     settings['user_command_prompt'] = f.read()
+
+            chk_file = os.path.join(filepath, settings['python_command_prompt'])
+            if os.path.isfile(chk_file):
+                with open(chk_file, 'r') as f:
+                    settings['python_command_prompt'] = f.read()
 
         return settings
     except FileNotFoundError:

@@ -2,5 +2,6 @@
     "command_prompt": "prompts/command.txt",
     "display_prompt": "prompts/display.txt",
     "user_command_prompt": "prompts/user_command.txt",
+    "python_command_prompt": "prompts/system/python_add_code.txt",
     "model": "OpenAI"
 }

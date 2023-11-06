@@ -1,17 +1,22 @@
 # Import necessary modules
+import asyncio
 import datetime
 import json
 import os
 import platform
+import queue
 import re
 import subprocess
 import logging
 import signal
 import base64
+import threading
 import spacy
 from pygments import lexers
+from modules.command_result import CommandResult
 
 from modules.llm import LLM, ModelTypes
+from modules.run_command import CommandRunner
 from modules.utils import get_file_size, get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
 from modules.vectors import find_relevant_file_segments
 
@@ -19,17 +24,15 @@ from modules.vectors import find_relevant_file_segments
 nlp = spacy.load("en_core_web_sm")
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-class CommandResult:
-    def __init__(self, stdout, stderr):
-        self.out = stdout
-        self.err = stderr
+
 
 class ShellSpeak:
     def __init__(self, settings, base_path):
-
         self.llm_len = int(settings.get("llm_size", 4097))
         self.llm_history_len = int(settings.get("llm_history_size", 2000))
         self.llm_file_len = int(settings.get("llm_file_size", 2000))
+
+        self.temp_file = settings.get("temp_file", "temp")
 
         self.llm_output_size = int(settings.get("llm_output_size", 4097))
         self.use_cache = settings.get("use_cache", False)
@@ -38,6 +41,8 @@ class ShellSpeak:
         self.vector_for_commands = settings.get("vector_for_commands", False)
         self.vector_for_history = settings.get("vector_for_history", True)
 
+        
+
         self.settings = settings
         self.command_history = ""
         self.settingsRoot = base_path
@@ -45,6 +50,8 @@ class ShellSpeak:
         self.files = []
 
         self.llm = LLM(model_type=ModelTypes(self.settings.get('model', "OpenAI")), use_cache=self.use_cache, cache_file=self.cache_file) #Zephyr7bBeta
+
+        self.command_runner = CommandRunner(self)
 
         logging.info(f"Shell Speak Loaded")
 
@@ -76,39 +83,43 @@ class ShellSpeak:
         except lexers.ClassNotFound:
             return None
     
-    def execute_python_script(self, python_section):
+    async def execute_python_script(self, python_section):
         lines = python_section.split('\n')
         if len(lines) == 1:
             # Single-line script, execute directly
             script = lines[0]
-            output = self.run_python_script(script)
+            # script = f"{self.settings['python_command_prompt']}\n{script}"
+            output = await self.run_python_script(script)
             return output
         else:
             # Multi-line script, create a python file
-            python_filename = 'temp.py'
+            python_filename = f'{self.temp_file}.py'
             if lines[0].startswith('#'):
                 # Use commented out filename
                 python_filename = lines[0][1:].strip()
                 lines = lines[1:]  # Remove the filename line
 
+            script = '\n'.join(lines)
+            script = f"{self.settings['python_command_prompt']}\n{script}"
+
             with open(python_filename, 'w') as python_file:
-                python_file.write('\n'.join(lines))
-            self.show_file("Python File", lines)
+                python_file.write(script)
+            self.show_file("Python File", script.split('\n'))
             user_confirmation = input("Are you sure you want to run this Python script? (yes/no): ")
             if user_confirmation.lower() != 'yes':
                 return CommandResult("", "Run python file Canceled.")
-            output = self.run_python_script(python_filename)
-            if python_filename == 'temp.py':
+            output = await self.run_python_script(python_filename)
+            if python_filename == f'{self.temp_file}.py':
                 os.remove(python_filename)  # Remove temporary python file
             return output
     
-    def run_python_script(self, script):
+    async def run_python_script(self, script):
         # If the script is a file, use 'python filename.py' to execute
         if script.endswith('.py'):
             command = f'python {script}'
         else:
             command = f'python -c "{script}"'
-        result = self.run_command(command)
+        result = await self.run_command(command)
         return CommandResult(result.out, result.err)
     
     def extract_script_command(self, script_type, text):
@@ -124,7 +135,7 @@ class ShellSpeak:
     
     
 
-    def execute_shell_section(self, shell_section):
+    async def execute_shell_section(self, shell_section):
 
         logging.info(f"Executing Shell Section : {shell_section}")
 
@@ -137,12 +148,12 @@ class ShellSpeak:
             # Single-line command, execute directly
             command = lines[0]
 
-            ret_value = self.run_command(command)
+            ret_value = await self.run_command(command)
             logging.error(f"Execute Shell Directory Line Strip: {ret_value}")
 
         else:
             # Multi-line command, create a batch file
-            batch_filename = 'temp.bat'
+            batch_filename = f'{self.temp_file}.bat'
             if lines[0].startswith('REM '):
                 # Use commented out filename
                 batch_filename = lines[0][4:].strip()
@@ -156,10 +167,10 @@ class ShellSpeak:
             logging.info(f"user_confirmation : {user_confirmation}")
             if user_confirmation.lower() != 'yes':
                 return CommandResult("", "Run batch file Canceled.")
-            ret_value = self.run_command(batch_filename)
+            ret_value = await self.run_command(batch_filename)
             
             logging.info(f"command output : out: {ret_value.out}, err: {ret_value.err}")
-            if batch_filename == 'temp.bat':
+            if batch_filename == f'{self.temp_file}.bat':
                 os.remove(batch_filename)  # Remove temporary batch file
                 logging.info(f"removing : {batch_filename}")
 
@@ -170,35 +181,13 @@ class ShellSpeak:
         process_group_id = os.set_handle_inheritance(0, 1)
         return process_group_id
 
-    def run_command(self, command):
+    async def run_command(self, command):
         command += " && cd"
         logging.info(f"run command : {command}")
 
-        # Determine the operating system
-        is_windows = platform.system() == 'Windows'
+        stdout, stderr = await self.command_runner.run(command)
 
-        # Set up the subprocess arguments based on the operating system
-        popen_args = {
-            'args': command,
-            'shell': True,
-            'text': True,
-            'stdin': subprocess.PIPE,
-            'stdout': subprocess.PIPE,
-            'stderr': subprocess.PIPE,
-        }
-        if not is_windows:
-            popen_args['preexec_fn'] = os.setsid  # This is UNIX-only
-        else:
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            popen_args['startupinfo'] = startupinfo
-            popen_args['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
 
-        process = subprocess.Popen(**popen_args)
-        
-        # Wait for the process to finish and get the final output and error
-        stdout, stderr = process.communicate()
-        
         if stderr == "":
             lines = stdout.strip().split("\n")
             if lines:
@@ -216,10 +205,16 @@ class ShellSpeak:
             stderr = f"Command : {command}, Error: {stderr}"
 
         logging.info(f"run return : out: {stdout}, err: {stderr}")
-        
+
         ret_val = CommandResult(stdout, stderr)
         return ret_val
+    
         
+    def format_for_display(self, input, output):
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        self.command_history += f"History: [Time: {timestamp}\nInput: {input}\nOutput: {output}]\n"
+        self.display_output(output)
+
     def handle_input(self, process):
         try:
             while True:
@@ -294,7 +289,7 @@ class ShellSpeak:
 
 
 
-    def translate_to_command(self, user_input):
+    async def translate_to_command(self, user_input):
         user_command_prompt = self.settings['user_command_prompt']
         
 
@@ -466,7 +461,10 @@ class ShellSpeak:
 
         logging.info(f"Translate use System Prompt : {system_command_prompt}")
         logging.info(f"Translate use User Prompt : {user_command_prompt}")
-        command_output = self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
+        # command_output = self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
+        # loop = asyncio.get_event_loop()
+        # command_output = await loop.run_in_executor(None, lambda: self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI"))))
+        command_output = await self.llm.async_ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
         logging.info(f"Translate return Response : {command_output}")
 
         if command_output == None:
@@ -477,7 +475,7 @@ class ShellSpeak:
         elif len(command_output) > 8 and command_output[:8] == "COMMAND:":
             command_output = command_output[8:].strip()
         
-            success, command_output = self.execute_command(command_output)
+            success, command_output = await self.execute_command(command_output)
             if not success:
                 print(f"Exe Error: {command_output.err}")
                 command_output = command_output.err
@@ -540,9 +538,9 @@ class ShellSpeak:
         
             if not canceled:
                 if check == "shell" or check == "batch" or check == "bash":
-                    command_output = self.execute_shell_section(command_output)
+                    command_output = await self.execute_shell_section(command_output)
                 else:
-                    command_output = self.execute_python_script(command_output)
+                    command_output = await self.execute_python_script(command_output)
 
                 if command_output.err != "":
                     print(f"Shell Error: {command_output.out}")
@@ -564,10 +562,10 @@ class ShellSpeak:
 
         return command_output
 
-    def execute_command(self, command):
+    async def execute_command(self, command):
         try:
             logging.info(f"Execute Command : {command}")
-            result = self.run_command(command)
+            result = await self.run_command(command)
             if result.err:
                 logging.info(f"Execute Error : {result.err}")
                 return False, result
@@ -578,7 +576,7 @@ class ShellSpeak:
         except Exception as e:
             return False, CommandResult("", str(e))
 
-    def translate_output(self, output):
+    def translate_output(self, output, is_internal=False):
         logging.info(f"Translate Output : {output}")
         send_prompt = self.settings['display_prompt']
         total_tokens = self.llm_output_size - (get_token_count(send_prompt) + get_token_count(output) + 80)
@@ -597,7 +595,8 @@ class ShellSpeak:
 
         kwargs = {
              'get_os_name': get_os_name(),
-             'command_history': set_command_history
+             'command_history': set_command_history,
+             'internal_script': str(is_internal)
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
 
@@ -611,12 +610,12 @@ class ShellSpeak:
         print_colored_text(output)
 
     def display_about(self):
-        print_colored_text("[bold][yellow]======================================================\nShellSpeak\n======================================================\n[white]AI powered Console Input\nVisit: https://github.com/TheCompAce/ShellSpeak\nDonate: @BradfordBrooks79 on Venmo\n\n[grey]Tip: Type 'help' for Help.\n[yellow]======================================================\n")
+        print_colored_text("[bold][yellow]======================================================\nShellSpeak\n======================================================\n[white]AI powered Console Input\nVisit: https://github.com/TheCompAce/ShellSpeak\nDonate: @BradfordBrooks79 on Venmo\n\n[grey]Type 'help' for Help.\n[yellow]======================================================\n")
 
     def display_help(self):
-        print_colored_text("[bold][yellow]======================================================\nShellSpeak Help\n======================================================\n[white]Type:\n'exit': to close ShellSpeak\n'user: /command/': pass a raw command to execute then reply threw the AI\n'file: /filepath/': adds file data to the command prompt. (use can send a folder path, using ',' to exclude folders and files.)\n'clm': Clear command Memory\n'about': Shows the About Information\n'help': Shows this Help information.\n[yellow]======================================================\n")
+        print_colored_text("[bold][yellow]======================================================\nShellSpeak Help\n======================================================\n[white]Type:\n'exit': to close ShellSpeak\n'user: /command/': pass a raw command to execute then reply threw the AI\n'file: /filepath/': adds file data to the command prompt. (use can send a folder path, using ',' to exclude folders and files.)\n'clm': Clear command Memory\n'rset': Reloads the settings file (this happens on every loading of the prompt.)\n'about': Shows the About Information\n'help': Shows this Help information.\n[yellow]======================================================\n")
 
-    def run(self):
+    async def run(self):
         self.display_about()
         while True:
             self.settings = load_settings(self.settingsRoot)
@@ -629,23 +628,31 @@ class ShellSpeak:
                 self.display_about()
             elif user_input.lower() == 'help':
                 self.display_help()
+            elif user_input.lower() == 'rset':
+                print("Settings Updated")
             elif user_input.lower() == 'clm':
                 self.command_history = ""
                 # self.command_history += f"Command Input: {user_input}\nCommand Output: Command History cleared.\n"
-                self.display_output(f"Command Memory cleared")
+                self.display_output(f"Command Memory (History) Cleared.")
             else:
                 timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 if user_input.lower().startswith('user: '):
                     # Bypass AI translation and send raw command to the OS
                     raw_command = user_input[6:]  # Extract the command part from user_input
-                    result = self.run_command(raw_command)
+                    try:
+                        result = await self.run_command(raw_command)
+                    except Exception as e:
+                        translated_command = e
                     translated_output = self.translate_output(result.out)
                     self.command_history += f"History: [Time: {timestamp}\nInput: {user_input}\nOutput: {result.out} Error: {result.err}]\n"
                     # self.display_output(f"Output:\n{result.out}\nError:\n{result.err}")
                     self.display_output(translated_output)
                 else:
                     # Continue with AI translation for the command
-                    translated_command = self.translate_to_command(user_input)
+                    try:
+                       translated_command = await self.translate_to_command(user_input)
+                    except Exception as e:
+                        translated_command = e
                     # if translated_command.err == "":
                     #    translated_output = self.translate_output(translated_command)
                     #    self.command_history += f"Command Input: {user_input}\nCommand Output: {translated_output}\n"
@@ -653,4 +660,5 @@ class ShellSpeak:
                     #else:
                     
                     self.command_history += f"History: [Time: {timestamp}\nInput: {user_input}\nOutput: {translated_command}]\n"
-                    self.display_output(translated_command)
+                    translated_output = self.translate_output(translated_command)
+                    self.display_output(translated_output)
