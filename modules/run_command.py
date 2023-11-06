@@ -6,12 +6,14 @@ class CommandRunner:
     def __init__(self, shell_speak):
         self.shell_speak = shell_speak
         self.collected_output = ""
-        self.pause_time = 1.0
+        self.collected_history = ""
+        self.pause_time = 0.5
         # self.output_event = asyncio.Event()
         self.use_input = False
 
     async def run(self, command):
         self.collected_output = ""
+        self.collected_history = ""
 
         my_error = {
             "err": False,
@@ -25,19 +27,38 @@ class CommandRunner:
             stderr=asyncio.subprocess.PIPE
         )
 
+        async def read_lines(stream):
+            lines = []
+            while True:
+                line = None
+                # print("OK T1")
+                line = await stream.readline()
+                if not line:
+                    # print("OK T2")
+                    break
+
+                # print(f"line = {line}")
+                lines.append(line)
+
+                # await asyncio.sleep(self.pause_time * 2)
+            return lines
+
         async def read_stream(stream, callback):
             while True:
                 await asyncio.sleep(self.pause_time) 
-                line = await stream.readline()
-                self.use_input = False
-                if line:
-                    if line != b'':
-                        decode_line = line.decode('utf-8').strip()
-                        if decode_line != ":WAIT_FOR_INPUT:":
-                            # self.collected_output += decode_line
-                            callback(decode_line)
-                        else:
-                            self.use_input = True
+                lines = await read_lines(stream)
+                for line in lines:
+                    self.use_input = False
+                    # print("OK9")
+                    if line:
+                        if line != b'':
+                            decode_line = line.decode('utf-8').strip()
+                            if decode_line != ":WAIT_FOR_INPUT:":
+                                self.collected_output += "\n" + decode_line
+                                # callback(decode_line)
+                                self.collected_history += "\n" + decode_line
+                            else:
+                                self.use_input = True
 
                 # Check if the process is still running
                 return_code = process.returncode  # None if the process is still running
@@ -65,8 +86,12 @@ class CommandRunner:
 
                     # Check for new output again
                     if self.collected_output:
+                        print(f"self.collected_output = {self.collected_output}")
                         translated_output = self.shell_speak.translate_output(self.collected_output, True)
+                        print(f"translated_output = {translated_output}")
                         self.shell_speak.display_output(translated_output)
+                        print("OK2")
+                        self.collected_history += "\n" + self.collected_output
                         self.collected_output = ""
                         
                     # No new output, so prompt for user input
@@ -74,13 +99,12 @@ class CommandRunner:
                     if self.use_input:
                         user_input = await asyncio.to_thread(input, self.collected_output)
                         self.use_input = False
-
-                    self.collected_output = ""
+                        self.collected_output = ""
                     
-                    if user_input:
-                        process.stdin.write(user_input.encode() + b'\n')
-                    else:  # Assume EOF if input is empty
-                        break
+                        if user_input:
+                            process.stdin.write(user_input.encode() + b'\n')
+                        else:
+                            process.stdin.close()  # Signal EOF to the subprocess
                 except EOFError:
                     # Handle Ctrl-Z (EOF) to cancel if needed
                     my_error["err"] = True
@@ -103,18 +127,26 @@ class CommandRunner:
             write_stream()
         )
 
-        stdout, stderr = await process.communicate()
+        # await asyncio.sleep(self.pause_time) 
+        # stdout, stderr = await process.communicate()
+
+        stderr = ""
 
         if my_error["err"]:
             stderr = my_error["desc"]
 
-        return self.collected_output, stderr.decode('utf-8') if not my_error["err"] else stderr
+        # print(f"self.collected_history = {self.collected_history}")
+        return self.collected_history, stderr if not my_error["err"] else stderr
 
 
     def handle_stdout(self, line):
+        print(f"line = {line}")
         if line.strip() != "" and line != ":WAIT_FOR_INPUT:":
+            print("OK 1")
+            self.collected_history += line + "\n"
             self.collected_output += line + "\n"
 
     def handle_stderr(self, line):
+        print("OK E")
         formatted_error = self.shell_speak.translate_output(line, True)
         self.shell_speak.display_output(formatted_error)

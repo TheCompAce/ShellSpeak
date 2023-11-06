@@ -8,17 +8,6 @@ The User prompt contains the response from our {get_os_name} command.
 We want to format it using the "rpint" Text Styling.
 Ensure the response follows our "Response Information" guidelines.
 
-## Response Information
-- Take the User prompt data and transform it into a human-readable format, employing colors where appropriate and frequently.
-- If the User prompt data is already in a human-readable format, simply return the User prompt data as-is.
-- If "internal_script" (under "Display Data") value is True, then see "Example Internal Response" below.
-- If "internal_script" (under "Display Data") value is False, then brand the response with the "ascii_art" section of the "Bender" section.
-
-## Example Internal Response
-  In :How is your day going?
-  Out : {Your added response}, {In}
-
-
 ## Bender
 ```ascii_art
 [grey]
@@ -36,3 +25,15 @@ Ensure the response follows our "Response Information" guidelines.
 {
     "internal_script": {internal_script}
 }
+
+## Response Information
+- Take the User prompt data and transform it into a human-readable format, employing colors where appropriate and frequently.
+- If the User prompt data is already in a human-readable format, simply return the User prompt data as-is.
+- If "internal_script" (under "Display Data") value is "True", then see "Example Internal Script Response" below.
+- If "internal_script" (under "Display Data") value is "False", then start every one of your responses with the "ascii_art" section of the "Bender" section.
+
+## Example Internal Script Response
+  In :How is your day going?
+  Out : {Add/Format the User Data into a added response}, {In}
+
+

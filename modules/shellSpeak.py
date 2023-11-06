@@ -116,9 +116,9 @@ class ShellSpeak:
     async def run_python_script(self, script):
         # If the script is a file, use 'python filename.py' to execute
         if script.endswith('.py'):
-            command = f'python {script}'
+            command = f'python -u {script}'
         else:
-            command = f'python -c "{script}"'
+            command = f'python -u -c "{script}"'
         result = await self.run_command(command)
         return CommandResult(result.out, result.err)
     
@@ -600,7 +600,8 @@ class ShellSpeak:
         }
         send_prompt = replace_placeholders(send_prompt, **kwargs)
 
-        logging.info(f"Translate Output Display Prompt : {send_prompt}")
+        logging.info(f"Translate Output Display System Prompt : {send_prompt}")
+        logging.info(f"Translate Output Display User Prompt : {output}")
         display_output = self.llm.ask(send_prompt, output, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
         logging.info(f"Translate Output Display Response : {display_output}")
         return display_output
