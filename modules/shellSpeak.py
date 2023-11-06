@@ -17,7 +17,7 @@ from modules.command_result import CommandResult
 
 from modules.llm import LLM, ModelTypes
 from modules.run_command import CommandRunner
-from modules.utils import get_file_size, get_token_count, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
+from modules.utils import get_file_size, get_token_count, is_valid_filename, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
 from modules.vectors import find_relevant_file_segments
 
 
@@ -73,8 +73,11 @@ class ShellSpeak:
     
     def show_file(self, caption, body):
         print_colored_text(f"[yellow]==== {caption} ====")
-        print_colored_text('[cyan]' + '\n'.join(body))
+        num_width = len(str(len(body)))
+        for line_number, line in enumerate(body, 1):  # Start counting from 1
+            print_colored_text(f'[yellow]{line_number:{num_width}}:[cyan] {line}')  # Adjust the format as needed
         print_colored_text("[yellow]====================")
+
 
     def detect_language(self, code):
         try:
@@ -96,8 +99,11 @@ class ShellSpeak:
             python_filename = f'{self.temp_file}.py'
             if lines[0].startswith('#'):
                 # Use commented out filename
-                python_filename = lines[0][1:].strip()
-                lines = lines[1:]  # Remove the filename line
+                check_filename = lines[0][1:].strip()
+                
+                if (is_valid_filename(check_filename)):
+                    python_filename = lines[0][1:].strip()
+                    lines = lines[1:]  # Remove the filename line
 
             script = '\n'.join(lines)
             script = f"{self.settings['python_command_prompt']}\n{script}"
@@ -532,7 +538,11 @@ class ShellSpeak:
                 code_type = self.detect_language(command_output)
                 if code_type == "Python":
                    check = "python"
+                elif code_type == "Text only":
+                    # Skip files to do nothing with
+                    pass
                 else:
+                   # Unknown text script Type
                    print(f"code_type = {code_type}")
                    canceled = True
         

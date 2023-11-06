@@ -1,7 +1,7 @@
 import json
 import os
 import platform
-from termcolor import colored
+import unicodedata
 import spacy
 import re
 from rich.console import Console
@@ -199,3 +199,40 @@ def get_file_size(filepath):
         return "Permission denied."
     except Exception as e:
         return f"An error occurred: {e}"
+    
+def is_valid_filename(filename):
+    # Normalize unicode characters
+    filename = unicodedata.normalize('NFC', filename)
+
+    # Common invalid characters across *nix and Windows
+    invalid_chars = r'[<>:"/\\|?*\x00-\x1F]'
+    if any(char in invalid_chars for char in filename):
+        return False  # Contains invalid characters
+    if len(filename.encode('utf-8')) > 255:
+        return False  # Exceeds length restrictions when encoded in UTF-8
+    
+    # Windows-specific checks
+    if platform.system() == "Windows":
+        # Windows does not allow filenames to end with a dot or a space
+        if filename.endswith('.') or filename.endswith(' '):
+            return False
+        # Check for valid drive letter
+        if re.match(r'^[a-zA-Z]:\\', filename):
+            return False
+        # Windows reserved filenames
+        reserved_names = (
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        )
+        basename, _, ext = filename.rpartition('.')
+        if basename.upper() in reserved_names:
+            if not ext or basename.upper() != filename.upper():
+                return False
+
+    # *nix-specific checks (optional)
+    # For example, disallowing hidden files (starting with a dot)
+    # if filename.startswith('.'):
+    #     return False
+
+    return True
