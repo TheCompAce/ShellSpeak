@@ -17,7 +17,7 @@ from modules.command_result import CommandResult
 
 from modules.llm import LLM, ModelTypes
 from modules.run_command import CommandRunner
-from modules.utils import get_file_size, get_token_count, is_valid_filename, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
+from modules.utils import get_file_size, get_token_count, is_valid_filename, list_files_and_folders_with_sizes, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
 from modules.vectors import find_relevant_file_segments
 
 
@@ -28,9 +28,11 @@ logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s 
 
 class ShellSpeak:
     def __init__(self, settings, base_path):
-        self.llm_len = int(settings.get("llm_size", 4097))
-        self.llm_history_len = int(settings.get("llm_history_size", 2000))
-        self.llm_file_len = int(settings.get("llm_file_size", 2000))
+        self.llm_len = int(settings.get("llm_size", 14000))
+        self.llm_history_len = int(settings.get("llm_history_size", 4000))
+        self.llm_file_len = int(settings.get("llm_file_size", 4000))
+        self.llm_folder_len = int(settings.get("llm_folder_size", 4000))
+        self.llm_slide_len = int(settings.get("llm_slide_len", 120))
 
         self.temp_file = settings.get("temp_file", "temp")
 
@@ -40,6 +42,8 @@ class ShellSpeak:
 
         self.vector_for_commands = settings.get("vector_for_commands", False)
         self.vector_for_history = settings.get("vector_for_history", True)
+        self.vector_for_folders = settings.get("vector_for_folders", True)
+        
 
         
 
@@ -111,7 +115,7 @@ class ShellSpeak:
             with open(python_filename, 'w') as python_file:
                 python_file.write(script)
             self.show_file("Python File", script.split('\n'))
-            user_confirmation = input("Are you sure you want to run this Python script? (yes/no): ")
+            user_confirmation = capture_styled_input("[yellow]Are you sure you want to run this Python script? (yes/no): ")
             if user_confirmation.lower() != 'yes':
                 return CommandResult("", "Run python file Canceled.")
             output = await self.run_python_script(python_filename)
@@ -169,7 +173,7 @@ class ShellSpeak:
             with open(batch_filename, 'w') as batch_file:
                 batch_file.write('\n'.join(lines))
             self.show_file("Batch File", lines)
-            user_confirmation = input("Are you sure you want to run this batch file? (yes/no): ")
+            user_confirmation = capture_styled_input("[yellow]Are you sure you want to run this batch file? (yes/no): ")
             logging.info(f"user_confirmation : {user_confirmation}")
             if user_confirmation.lower() != 'yes':
                 return CommandResult("", "Run batch file Canceled.")
@@ -221,30 +225,6 @@ class ShellSpeak:
         self.command_history += f"History: [Time: {timestamp}\nInput: {input}\nOutput: {output}]\n"
         self.display_output(output)
 
-    def handle_input(self, process):
-        try:
-            while True:
-                user_input = input("Enter 'pause' to pause, 'resume' to resume, or 'ctrl+c' to terminate: ").lower()
-                # Determine the operating system
-                is_windows = platform.system() == 'Windows'
-
-                if not is_windows:
-                    # UNIX-like behavior
-                    if user_input == 'pause':
-                        os.killpg(os.getpgid(process.pid), signal.SIGSTOP)
-                    elif user_input == 'resume':
-                        os.killpg(os.getpgid(process.pid), signal.SIGCONT)
-                    elif user_input == 'ctrl+c':
-                        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                else:
-                    # Windows behavior
-                    if user_input == 'ctrl+c':
-                        os.kill(process.pid, signal.CTRL_BREAK_EVENT)  # Send CTRL+BREAK to the process
-                    else:
-                        print("Pausing and resuming are not supported on Windows.")
-
-        except Exception as e:
-            logging.error(f"Error in handle_input: {e}")
 
     def shrink_file_data(self, file_data, target_tokens):
         if len(file_data) > nlp.max_length:
@@ -286,7 +266,7 @@ class ShellSpeak:
                                 new_file_list.append(os.path.join(root, name))
                 else:
                     # If no, inform the user that the directory is being skipped
-                    print(f"Skipping directory '{file_path}'.")
+                    print_colored_text(f"[blue]Skipping directory '{file_path}'.")
             else:
                 # If the path is a file, just add it to the list
                 if os.path.basename(file_path) not in exclusions:
@@ -294,36 +274,48 @@ class ShellSpeak:
         return new_file_list
 
 
+    def string_sizer(self, data, context, len=1024, use_vector=True):
+        set_data = data
+        token_count = get_token_count(set_data)
+        if token_count > len:
+            if use_vector:
+                relevant_segments = find_relevant_file_segments(
+                            history_text= context,
+                            file_data=set_data,
+                            window_size=len, # or any other size you deem appropriate (8124)
+                            overlap=self.llm_slide_len,      # or any other overlap size you deem appropriate
+                            top_k=1           # or any other number of segments you deem appropriate
+                        )
+                set_data = '/n.../n'.join(relevant_segments)
+            else:
+                set_data = trim_to_right_token_count(set_data, len)
+        data_tokens = get_token_count(set_data)
+        logging.info(f"Translate to Command History Token Count : {data_tokens}")
+
+        return data_tokens, set_data
 
     async def translate_to_command(self, user_input):
         user_command_prompt = self.settings['user_command_prompt']
-        
-
         send_prompt = self.settings['command_prompt']
         max_llm = (self.llm_len - 80) #80 is used to padd json formating of System Messages and over all prompt size.
         max_llm -= get_token_count(send_prompt)
         max_llm -= get_token_count(user_input)
         
-        set_command_history = self.command_history
-        token_count = get_token_count(set_command_history)
-        if token_count > self.llm_history_len:
-            if self.vector_for_history:
-                relevant_segments = find_relevant_file_segments(
-                            history_text= user_input,
-                            file_data=set_command_history,
-                            window_size=self.llm_history_len, # or any other size you deem appropriate (8124)
-                            overlap=100,      # or any other overlap size you deem appropriate
-                            top_k=1           # or any other number of segments you deem appropriate
-                        )
-                set_command_history = '/n.../n'.join(relevant_segments)
-            else:
-                set_command_history = trim_to_right_token_count(set_command_history, self.llm_history_len)
-        history_tokens = get_token_count(set_command_history)
+        history_tokens, command_history = self.string_sizer(self.command_history, user_input, self.llm_history_len, self.vector_for_history)
+        command_history = json.dumps(command_history)
         max_llm -= history_tokens
-        logging.info(f"Translate to Command History Token Count : {history_tokens}")
 
-
-        command_history = json.dumps(set_command_history)
+        # Add get folders/Files
+        current_directory = os.getcwd()
+        folder_list = list_files_and_folders_with_sizes(current_directory)
+        folder_list = {
+            "path": current_directory,
+            "folder_list": folder_list
+        }
+        folder_list = json.dumps(folder_list)
+        folder_list_tokens, folder_list = self.string_sizer(folder_list, command_history + "/n" + user_input, self.llm_folder_len, self.vector_for_commands)
+        folder_list = json.dumps(folder_list)
+        max_llm -= folder_list_tokens
 
         set_command_files_data = []
         total_tokens = 0
@@ -386,17 +378,14 @@ class ShellSpeak:
 
                     remaining_tokens_split = int(remaining_tokens / div_val)
                     
-            # remaining_tokens = self.llm_file_len
-            # remaining_tokens_split = int(remaining_tokens / len(files_data)) + 1
-
             if len(new_files_data) > 0:
                 for new_file in new_files_data:
-                    print(f"File {new_file['file']} Trimming")
+                    print_colored_text(f"[blue]File {new_file['file']} Trimming")
                     relevant_segments = find_relevant_file_segments(
-                            history_text=command_history + "\n"+ user_input,
+                            history_text=folder_list + "\n" + command_history + "\n"+ user_input,
                             file_data=new_file['file_data'],
                             window_size=new_file['file_tokens'], # or any other size you deem appropriate (8124)
-                            overlap=100,      # or any other overlap size you deem appropriate
+                            overlap=self.llm_slide_len,      # or any other overlap size you deem appropriate
                             top_k=1           # or any other number of segments you deem appropriate
                         )
                     new_file['file_data'] = '/n.../n'.join(relevant_segments)
@@ -430,23 +419,10 @@ class ShellSpeak:
         max_llm -= total_tokens
 
         commands = map_possible_commands()
-        token_count = get_token_count(commands)
-        if token_count > max_llm:
-            if self.vector_for_commands:
-                relevant_segments = find_relevant_file_segments(
-                            history_text=command_history + "\n"+ user_input,
-                            file_data=commands,
-                            window_size=max_llm, # or any other size you deem appropriate (8124)
-                            overlap=100,      # or any other overlap size you deem appropriate
-                            top_k=1           # or any other number of segments you deem appropriate
-                        )
-                commands = '/n.../n'.join(relevant_segments)
-                commands = commands.replace(' .exe', '.exe').replace(' .bat', '.bat').replace(' .com', '.com').replace(' .sh', '.sh')
-            else:
-                commands = trim_to_token_count(commands, max_llm)
+        command_tokens, commands = self.string_sizer(commands, command_files_data + "\n" + folder_list + "\n" + command_history + "\n"+ user_input, max_llm, self.vector_for_commands)
         
         command_tokens = get_token_count(commands)
-        logging.info(f"Translate to Command File Token Count : {command_tokens}")
+        logging.info(f"Translate to Command Commands Token Count : {command_tokens}")
         
         logging.info(f"Translate to Command : {user_input}")
 
@@ -455,7 +431,8 @@ class ShellSpeak:
             'get_os_name': get_os_name(),
             'commands': commands,
             'command_history': command_history,
-            'command_files_data': command_files_data
+            'command_files_data': command_files_data,
+            'current_folders_data': folder_list
         }
         user_command_prompt = replace_placeholders(user_command_prompt, **kwargs)
         system_command_prompt = replace_placeholders(send_prompt, **kwargs)
@@ -476,18 +453,82 @@ class ShellSpeak:
         if command_output == None:
             command_output = "Error with Command AI sub system!"
         elif len(command_output) > 9 and command_output[:9] == "RESPONSE:":
-            print(f"command_output = {command_output}")
+            # print(f"command_output = {command_output}")
             command_output = command_output[9:].strip()
         elif len(command_output) > 8 and command_output[:8] == "COMMAND:":
             command_output = command_output[8:].strip()
-        
-            success, command_output = await self.execute_command(command_output)
-            if not success:
-                print(f"Exe Error: {command_output.err}")
-                command_output = command_output.err
+            # run_python_script
+            if len(command_output) > 6 and command_output[:6] == "python":
+                while True:
+                    run_as_mod = capture_styled_input("[yellow]Do you want to add our compatablity code? (yes/no/exit) :")
+                    run_as_code = False
+                    cancel_run = False
+                    if run_as_mod == "yes" or run_as_mod == "y":
+                        run_as_code = True
+                        break
+                    elif run_as_mod == "no" or run_as_mod == "n":
+                        run_as_code = False
+                        break
+                    elif run_as_mod == "exit":
+                        cancel_run = True
+                        break
+                    else:
+                        print_colored_text("[red]Invalid Input!")
+            
+                if not cancel_run:
+                    if run_as_code:
+                        # Extract the Python script or module name from the command
+                        command_parts = command_output.split()
+                        script_name = None
+                        for i, part in enumerate(command_parts):
+                            if part.endswith(".py"):
+                                script_name = part
+                                break
+                            elif part == "-m" and i < len(command_parts) - 1:
+                                script_name = command_parts[i + 1] + ".py"  # Assuming the module name is a Python file name
+                                break
+
+                        # Open and read the script if the name is found
+                        if script_name:
+                            try:
+                                with open(script_name, 'r') as file:
+                                    python_code = file.read()
+
+                                print(f"python_code = {python_code}")
+
+                                # Now, python_code contains the content of the Python file
+                                # You can now pass this code to execute_python_script function
+                                command_output = await self.execute_python_script(python_code)
+
+                            except FileNotFoundError:
+                                print_colored_text(f"[red]Error: The file {script_name} was not found.")
+                                logging.info(f"Translate Command Error: The file {script_name} was not found.")
+                            except Exception as e:
+                                print_colored_text(f"[red]Error: An error occurred while reading the file {script_name}: {e}")
+                                logging.info(f"Translate Command Error: An error occurred while reading the file {script_name}: {e}")
+                        else:
+                            print_colored_text("[red]Error: No Python script name could be extracted from the command.")
+                            logging.info(f"Translate Command Error: No Python script name could be extracted from the command.")
+                    else:
+                        success, command_output = await self.execute_command(command_output)
+                        if not success:
+                            print_colored_text(f"[red]Exe Error: {command_output.err}")
+                            command_output = command_output.err
+                        else:
+                            command_output = command_output.out
+                        logging.info(f"Translate Command Execute : {command_output}")
+                else:
+                    logging.info(f"Translate Command Cancled : {command_output}")
             else:
-                command_output = command_output.out
-            logging.info(f"Translate Command Execute : {command_output}")
+                success, command_output = await self.execute_command(command_output)
+                if not success and command_output.err.strip() != "":
+                    print_colored_text(f"[red]Exe Error: {command_output.err}")
+                    command_output = command_output.err
+                else:
+                    command_output = command_output.out
+                logging.info(f"Translate Command Execute : {command_output}")
+
+            
         else:
             check_list = ["shell", "batch", "bash", "python"]
             multi_scripts = []
@@ -502,7 +543,10 @@ class ShellSpeak:
                     
                     # Assuming self.check_script processes the script content
                     #check_command_output = self.check_script(check, script_content)
-                    check_command_output = script_content
+                    print(f"script_content = {script_content}")
+                    check_command_output = script_content.strip()
+
+                    print(f"check_command_output = {check_command_output}")
                     
                     add_match = {
                         "check": check,
@@ -512,15 +556,16 @@ class ShellSpeak:
                     multi_scripts.append(add_match)
 
             canceled = False
+            check_type = ""
             if len(multi_scripts) > 0:
                 if len(multi_scripts) > 1:
                     while True:
                         print_colored_text(f"[yellow]===== Base Command =====\n[white]{command_output}\n[yellow]========================")
                         print_colored_text(f"[yellow]Found {len(multi_scripts)} diffrent scripts in the response")
                         for m, multi_script in enumerate(multi_scripts):
-                            print(f"{m + 1} : {multi_script['check']}")
+                            print_colored_text(f"[yellow]{m + 1} :[white] {multi_script['check']}")
                         
-                        print(f"{len(multi_scripts) + 1} : Cancel")
+                        print_colored_text(f"[yellow]{len(multi_scripts) + 1} :[white] Cancel")
                         get_check = capture_styled_input("[yellow]Select the type of script you want to run: ")
 
                         if get_check.isdigit:
@@ -536,8 +581,9 @@ class ShellSpeak:
 
             else:
                 code_type = self.detect_language(command_output)
+                print(f"code_type = {code_type}")
                 if code_type == "Python":
-                   check = "python"
+                   check_type = "python"
                 elif code_type == "Text only":
                     # Skip files to do nothing with
                     pass
@@ -547,13 +593,20 @@ class ShellSpeak:
                    canceled = True
         
             if not canceled:
-                if check == "shell" or check == "batch" or check == "bash":
+                print(f"check_type = {check_type}")
+                if check_type == "shell" or check_type == "batch" or check_type == "bash":
+                    print(f"command_output 1 = {command_output}")
                     command_output = await self.execute_shell_section(command_output)
-                else:
+                elif check_type == "python":
+                    print(f"command_output 2 = {command_output}")
                     command_output = await self.execute_python_script(command_output)
+                else:
+                    print(f"command_output 3 = {command_output}")
+                    command_output = await self.run_command(command_output)
 
+                print(f"command_output = {command_output}")
                 if command_output.err != "":
-                    print(f"Shell Error: {command_output.out}")
+                    print_colored_text(f"[red]Shell Error: {command_output.out}")
                     command_output = command_output.err
                 else:    
                     command_output = command_output.out
@@ -597,11 +650,25 @@ class ShellSpeak:
         if token_count > total_tokens:
             set_command_history = trim_to_right_token_count(set_command_history, total_tokens)
 
-        # ext_tokens = token_count
+        max_llm = (self.llm_len - 80) #80 is used to padd json formating of System Messages and over all prompt size.
+        max_llm -= get_token_count(send_prompt)
+        max_llm -= get_token_count(output)
+        
+        history_tokens, command_history = self.string_sizer(self.command_history, output, self.llm_history_len)
+        command_history = json.dumps(command_history)
+        max_llm -= history_tokens
 
-        # token_count = get_token_count(output)
-        # if token_count > self.llm_output_size - ext_tokens:
-        #    output = trim_to_token_count(output, self.llm_output_size - ext_tokens)
+        # Add get folders/Files
+        current_directory = os.getcwd()
+        folder_list = list_files_and_folders_with_sizes(current_directory)
+        folder_list = {
+            "path": current_directory,
+            "folder_list": folder_list
+        }
+        folder_list = json.dumps(folder_list)
+        folder_list_tokens, folder_list = self.string_sizer(folder_list, self.command_history + "/n" + output, self.llm_folder_len)
+        folder_list = json.dumps(folder_list)
+        max_llm -= folder_list_tokens
 
         kwargs = {
              'get_os_name': get_os_name(),
@@ -640,7 +707,7 @@ class ShellSpeak:
             elif user_input.lower() == 'help':
                 self.display_help()
             elif user_input.lower() == 'rset':
-                print("Settings Updated")
+                self.display_output(f"Settings Updated.")
             elif user_input.lower() == 'clm':
                 self.command_history = ""
                 # self.command_history += f"Command Input: {user_input}\nCommand Output: Command History cleared.\n"

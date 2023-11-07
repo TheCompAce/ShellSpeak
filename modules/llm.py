@@ -73,7 +73,7 @@ class LLM:
         if model_type == ModelTypes.OpenAI:
             return self._ask_openai(system_prompt, user_prompt)
         elif model_type == ModelTypes.OpenAI4:
-            return self._ask_openai(system_prompt, user_prompt, model="gpt-4", max_tokens=8190)
+            return self._ask_openai(system_prompt, user_prompt, model="gpt-4-1106-preview", max_tokens=8190)
         elif model_type == ModelTypes.Mistral:
             return self._ask_mistral(system_prompt, user_prompt)
         elif model_type == ModelTypes.StableBeluga7B:
@@ -85,7 +85,7 @@ class LLM:
         elif model_type == ModelTypes.Falcon7BInst:
             return self._ask_falcon_7b_instruct(system_prompt, user_prompt)
 
-    def _ask_openai(self, system_prompt, user_prompt, model = "gpt-3.5-turbo", max_tokens=4096):
+    def _ask_openai(self, system_prompt, user_prompt, model = "gpt-3.5-turbo-1106", max_tokens=4096):
         # Placeholder for actual OpenAI API request
         # Uncomment and complete the following code in your local environment
         api_key = os.environ.get("OPENAI_API_KEY", "your-default-openai-api-key-here")

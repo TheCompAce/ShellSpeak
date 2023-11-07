@@ -3,6 +3,7 @@
 - "operating_system" is used to Id the system you need to make Commands/Scripts for.
 - "run_command_list" holds the Commands, on top of the default commands for {get_os_name}.
 - "command_list_history" holds our history of our chat ("History" is a Chat Item, in that "Time" is the time, "Input" is what the user asked, and "Output" is your response.)
+- "current_folder" holds the path and files/folders in the folder, we are currently in.
 - "command_files" is the list of files, and dat that might help you with our request.
 - if "User Request" is empty then reply with a joke.
 
@@ -12,6 +13,9 @@
     "operating_system": '{get_os_name}',
     "run_command_list" : {
         "{commands}"
+    },
+    "current_folder": {
+        {current_folders_data}
     },
     "command_list_history" : {
         {command_history}

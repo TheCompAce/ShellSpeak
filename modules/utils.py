@@ -79,6 +79,7 @@ def map_possible_commands():
                 if os.access(file_path, os.X_OK):
                     if os_name == 'windows':
                         if extension.lower() in windows_wanted_extensions:
+                            file = file.replace(f'{windows_wanted_extensions}', '')
                             unique_commands.add(file)
                     else:
                         # On Unix-like systems, rely on executable permission
@@ -95,8 +96,11 @@ def map_possible_commands():
     return commands_str
 
 def print_colored_text(text, end_newline=True):
-    end = "\n" if end_newline else ""
-    console.print(text, end=end)
+    try:
+        end = "\n" if end_newline else ""
+        console.print(text, end=end)
+    except Exception as e:
+        print(text)
 
 def capture_styled_input(prompt):
     # Print the prompt without a newline at the end
@@ -236,3 +240,40 @@ def is_valid_filename(filename):
     #     return False
 
     return True
+
+def get_size(start_path):
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            try:
+                size = os.path.getsize(fp)
+                total_size += size
+            except OSError as e:
+                print(f"Error: {e}")
+                size = 0
+    return total_size
+
+
+def list_files_and_folders_with_sizes(start_path):
+    entries = os.scandir(start_path)
+    files_and_folders = []
+
+    for entry in entries:
+        # This is a check for the entry being a file or a folder at the top level only
+        if entry.is_dir(follow_symlinks=False):
+            entry_type = 'Folder'
+            size = 0  # Do not sum up sizes within the folder
+        elif entry.is_file(follow_symlinks=False):
+            entry_type = 'File'
+            size = get_size(entry.path)  # Get the size of the file
+        else:
+            entry_type = 'Other'  # For symbolic links, sockets, etc.
+            size = 0  # Other types do not have a size
+
+        files_and_folders.append({
+            'name': entry.name,
+            'type': entry_type,
+            'size': size  # Size is in bytes
+        })
+    return files_and_folders
