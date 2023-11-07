@@ -200,6 +200,7 @@ class ShellSpeak:
 
         stdout, stderr = await self.command_runner.run(command)
 
+        
 
         if stderr == "":
             lines = stdout.strip().split("\n")
@@ -214,6 +215,11 @@ class ShellSpeak:
                     logging.error(f"Invalid directory: {new_dir}")
             else:
                 logging.error("No output to determine the new working directory")
+
+            print(f"stdout = {stdout}")
+            if stdout.find("Traceback (most recent call last):") > -1:
+                stderr = stdout
+                stdout = command
         else:
             stderr = f"Command : {command}, Error: {stderr}"
 
@@ -548,7 +554,7 @@ class ShellSpeak:
                         command_output = CommandResult(script_text, f"Invalid Script Type : {script_type}")
 
                     if command_output.err != "":
-                        print_colored_text(f"[red]Shell Error: {command_output.out}")
+                        print_colored_text(f"[red]Shell Error: {command_output.err} with {command_output.out}")
                         command_output = command_output.err
                     else:    
                         command_output = command_output.out
