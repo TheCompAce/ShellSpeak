@@ -10,6 +10,7 @@ ShellSpeak is an interactive command-line interface that enhances the terminal e
 
 ## Highlights
 [ShellSpeak Demo](https://www.youtube.com/watch?v=a5bMRiIxkiU)
+- Now with the expanded space, and GPT JSON response reliability added.
 - Works just like the console. (With pretty colors.)
 - Embed files into you commands by using "file: /filepath/" (where "/filepath/" is the path to your file, allows for multiple files.)
 - Uses past conversation history.
