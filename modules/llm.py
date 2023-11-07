@@ -9,6 +9,8 @@ import requests
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+from modules.utils import get_token_count
+
 transformers.logging.set_verbosity_error()
 
 from modules.responseCache import ResponseCache
@@ -49,31 +51,31 @@ class LLM:
         elif self.model == ModelTypes.Zephyr7bBeta:
             return self._setup_zephyr_7bB()
 
-    async def async_ask(llm, system_prompt, user_prompt, model_type=None):
+    async def async_ask(llm, system_prompt, user_prompt, model_type=None, max_tokens=4096, return_type="text"):
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(executor, llm.ask, system_prompt, user_prompt, model_type)
+        response = await loop.run_in_executor(executor, llm.ask, system_prompt, user_prompt, model_type, max_tokens, return_type)
         return response
 
-    def ask(self, system_prompt, user_prompt, model_type=None):
+    def ask(self, system_prompt, user_prompt, model_type=None, max_tokens=4096, return_type="text"):
         if self.use_cache:
             cached_response = self.cache.get(system_prompt, user_prompt)
             if cached_response:
                 return cached_response
-        response = self._ask(system_prompt, user_prompt, model_type)
+        response = self._ask(system_prompt, user_prompt, model_type, max_tokens, return_type)
         if self.use_cache:
             self.cache.set(system_prompt, user_prompt, response)
         return response
 
-    def _ask(self, system_prompt, user_prompt, model_type = None):
+    def _ask(self, system_prompt, user_prompt, model_type = None, max_tokens=4096, return_type="text"):
         
         if model_type is None:
             model_type = self.model
         elif model_type is not self.model:
                 self.ClearModel(model_type)
         if model_type == ModelTypes.OpenAI:
-            return self._ask_openai(system_prompt, user_prompt)
+            return self._ask_openai(system_prompt, user_prompt, max_tokens=16000, return_type=return_type)
         elif model_type == ModelTypes.OpenAI4:
-            return self._ask_openai(system_prompt, user_prompt, model="gpt-4-1106-preview", max_tokens=8190)
+            return self._ask_openai(system_prompt, user_prompt, model="gpt-4-1106-preview", max_tokens=140000, return_type=return_type)
         elif model_type == ModelTypes.Mistral:
             return self._ask_mistral(system_prompt, user_prompt)
         elif model_type == ModelTypes.StableBeluga7B:
@@ -85,17 +87,22 @@ class LLM:
         elif model_type == ModelTypes.Falcon7BInst:
             return self._ask_falcon_7b_instruct(system_prompt, user_prompt)
 
-    def _ask_openai(self, system_prompt, user_prompt, model = "gpt-3.5-turbo-1106", max_tokens=4096):
+    def _ask_openai(self, system_prompt, user_prompt, model = "gpt-3.5-turbo-1106", max_tokens=16000, return_type="text"):
         # Placeholder for actual OpenAI API request
         # Uncomment and complete the following code in your local environment
         api_key = os.environ.get("OPENAI_API_KEY", "your-default-openai-api-key-here")
         api_url = "https://api.openai.com/v1/chat/completions"
+        token_ct = 0
+        token_ct = max_tokens - int(get_token_count(system_prompt + "\n" + user_prompt) + 20)
+        print(f"model = {model}")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         }
+        # "max_tokens": token_ct,
         data ={
             "model" : model,
+            "response_format": { "type": return_type},
             "messages" :  [
                 {
                     "role": "system",

@@ -90,7 +90,7 @@ class ShellSpeak:
         except lexers.ClassNotFound:
             return None
     
-    async def execute_python_script(self, python_section):
+    async def execute_python_script(self, python_section, filename):
         lines = python_section.split('\n')
         if len(lines) == 1:
             # Single-line script, execute directly
@@ -101,23 +101,26 @@ class ShellSpeak:
         else:
             # Multi-line script, create a python file
             python_filename = f'{self.temp_file}.py'
-            if lines[0].startswith('#'):
+            if filename:
                 # Use commented out filename
-                check_filename = lines[0][1:].strip()
+                check_filename = filename
                 
                 if (is_valid_filename(check_filename)):
-                    python_filename = lines[0][1:].strip()
-                    lines = lines[1:]  # Remove the filename line
+                    python_filename = filename
 
             script = '\n'.join(lines)
             script = f"{self.settings['python_command_prompt']}\n{script}"
 
             with open(python_filename, 'w') as python_file:
                 python_file.write(script)
+
             self.show_file("Python File", script.split('\n'))
             user_confirmation = capture_styled_input("[yellow]Are you sure you want to run this Python script? (yes/no): ")
             if user_confirmation.lower() != 'yes':
+                if python_filename == f'{self.temp_file}.py':
+                    os.remove(python_filename)  # Remove temporary python file
                 return CommandResult("", "Run python file Canceled.")
+            
             output = await self.run_python_script(python_filename)
             if python_filename == f'{self.temp_file}.py':
                 os.remove(python_filename)  # Remove temporary python file
@@ -145,7 +148,7 @@ class ShellSpeak:
     
     
 
-    async def execute_shell_section(self, shell_section):
+    async def execute_shell_section(self, shell_section, filename):
 
         logging.info(f"Executing Shell Section : {shell_section}")
 
@@ -442,12 +445,83 @@ class ShellSpeak:
         logging.info(f"Translate to Command User Token Count : {user_tokens}")
         logging.info(f"Translate to Command System Token Count : {system_tokens}")
 
-        logging.info(f"Translate use System Prompt : {system_command_prompt}")
-        logging.info(f"Translate use User Prompt : {user_command_prompt}")
-        # command_output = self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
+        logging.info(f"Translate to Command use System Prompt : {system_command_prompt}")
+        logging.info(f"Translate to Command use User Prompt : {user_command_prompt}")
+        # command_output = self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")), return_type="json_object")
         # loop = asyncio.get_event_loop()
         # command_output = await loop.run_in_executor(None, lambda: self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI"))))
-        command_output = await self.llm.async_ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
+        command_output = await self.llm.async_ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")), return_type="json_object")
+        logging.info(f"Translate to Command return Response : {command_output}")
+
+        display_content = ""
+        display_error = None
+        try:
+            command_output_obj = json.loads(command_output)
+            logging.info(f"Translate return Response : {command_output}")
+            type = command_output_obj["type"]
+            content = command_output_obj.get("content", None)
+            err = content.get("error", None)
+
+            if not err:
+                if type == "command_execution":
+                    command = content["command"]
+                    if len(command) > 6 and command[:6] == "python":
+                        print(f"Is Python = {command}")
+                        pass
+                    else:
+                        success, command_output = await self.execute_command(command)
+                        if not success and command_output.err.strip() != "":
+                            print_colored_text(f"[red]Exe Error: {command_output.err}")
+                            command_output = command_output.err
+                        else:
+                            command_output = command_output.out
+                        logging.info(f"Translate Command Execute : {command_output}")
+                    pass
+                elif type == "script_creation":
+                    script_text = content['script']
+                    script_type = content['script_type']
+                    script_filename = content.get('script_filename', None)
+
+                    if script_type == "shell" or script_type == "batch" or script_type == "bash":
+                        command_output = await self.execute_shell_section(script_text, script_filename)
+                    elif script_type == "python":
+                        command_output = await self.execute_python_script(script_text, script_filename)
+                    else:
+                        command_output = CommandResult(script_text, f"Invalid Script Type : {script_type}")
+
+                    if command_output.err != "":
+                        print_colored_text(f"[red]Shell Error: {command_output.out}")
+                        command_output = command_output.err
+                    else:    
+                        command_output = command_output.out
+
+                    logging.info(f"Translate Shell Execute : {command_output}")
+                elif type == "response_formatting":
+                    command_output = content["text"]
+                elif type == "error_handling":
+                    display_content = content["type"]
+                    display_error = err
+                else:
+                    display_content = command_output
+                    display_error = f"Invalid command type '{type}'."
+            else:
+                display_content = command_output
+                display_error = err
+                logging.info(f"Translate to Command Object Error : {err}, command_output= {command_output}")
+
+
+        except Exception as e:
+            display_content = command_output
+            display_error = e
+            logging.info(f"Translate to Command Object Error : {e}, command_output= {command_output}")
+
+        logging.info(f"Translate to Command Display Content : {display_content}")
+
+        if display_error:
+            return display_error
+        
+        return display_content
+
         logging.info(f"Translate return Response : {command_output}")
 
         if command_output == None:
@@ -679,7 +753,8 @@ class ShellSpeak:
 
         logging.info(f"Translate Output Display System Prompt : {send_prompt}")
         logging.info(f"Translate Output Display User Prompt : {output}")
-        display_output = self.llm.ask(send_prompt, output, model_type=ModelTypes(self.settings.get('model', "OpenAI")))
+        display_output = self.llm.ask(send_prompt, output, model_type=ModelTypes(self.settings.get('model', "OpenAI")), return_type="text")
+
         logging.info(f"Translate Output Display Response : {display_output}")
         return display_output
 
