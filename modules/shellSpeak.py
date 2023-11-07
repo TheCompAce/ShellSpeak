@@ -466,8 +466,66 @@ class ShellSpeak:
                 if type == "command_execution":
                     command = content["command"]
                     if len(command) > 6 and command[:6] == "python":
-                        print(f"Is Python = {command}")
-                        pass
+                        while True:
+                            run_as_mod = capture_styled_input("[yellow]Do you want to add our compatablity code? (yes/no/exit) :")
+                            run_as_code = False
+                            cancel_run = False
+                            if run_as_mod == "yes" or run_as_mod == "y":
+                                run_as_code = True
+                                break
+                            elif run_as_mod == "no" or run_as_mod == "n":
+                                run_as_code = False
+                                break
+                            elif run_as_mod == "exit":
+                                cancel_run = True
+                                break
+                            else:
+                                print_colored_text("[red]Invalid Input!")
+
+                        if not cancel_run:
+                            if run_as_code:
+                                # Extract the Python script or module name from the command
+                                command_parts = command_output.split()
+                                script_name = None
+                                for i, part in enumerate(command_parts):
+                                    if part.endswith(".py"):
+                                        script_name = part
+                                        break
+                                    elif part == "-m" and i < len(command_parts) - 1:
+                                        script_name = command_parts[i + 1] + ".py"  # Assuming the module name is a Python file name
+                                        break
+
+                                # Open and read the script if the name is found
+                                if script_name:
+                                    try:
+                                        with open(script_name, 'r') as file:
+                                            python_code = file.read()
+
+                                        print(f"python_code = {python_code}")
+
+                                        # Now, python_code contains the content of the Python file
+                                        # You can now pass this code to execute_python_script function
+                                        command_output = await self.execute_python_script(python_code)
+
+                                    except FileNotFoundError:
+                                        print_colored_text(f"[red]Error: The file {script_name} was not found.")
+                                        logging.info(f"Translate Command Error: The file {script_name} was not found.")
+                                    except Exception as e:
+                                        print_colored_text(f"[red]Error: An error occurred while reading the file {script_name}: {e}")
+                                        logging.info(f"Translate Command Error: An error occurred while reading the file {script_name}: {e}")
+                                else:
+                                    print_colored_text("[red]Error: No Python script name could be extracted from the command.")
+                                    logging.info(f"Translate Command Error: No Python script name could be extracted from the command.")
+                            else:
+                                success, command_output = await self.execute_command(command_output)
+                                if not success:
+                                    print_colored_text(f"[red]Exe Error: {command_output.err}")
+                                    command_output = command_output.err
+                                else:
+                                    command_output = command_output.out
+                                logging.info(f"Translate Command Execute : {command_output}")
+                        else:
+                            logging.info(f"Translate Command Cancled : {command_output}")
                     else:
                         success, command_output = await self.execute_command(command)
                         if not success and command_output.err.strip() != "":
@@ -521,175 +579,6 @@ class ShellSpeak:
             return display_error
         
         return display_content
-
-        logging.info(f"Translate return Response : {command_output}")
-
-        if command_output == None:
-            command_output = "Error with Command AI sub system!"
-        elif len(command_output) > 9 and command_output[:9] == "RESPONSE:":
-            # print(f"command_output = {command_output}")
-            command_output = command_output[9:].strip()
-        elif len(command_output) > 8 and command_output[:8] == "COMMAND:":
-            command_output = command_output[8:].strip()
-            # run_python_script
-            if len(command_output) > 6 and command_output[:6] == "python":
-                while True:
-                    run_as_mod = capture_styled_input("[yellow]Do you want to add our compatablity code? (yes/no/exit) :")
-                    run_as_code = False
-                    cancel_run = False
-                    if run_as_mod == "yes" or run_as_mod == "y":
-                        run_as_code = True
-                        break
-                    elif run_as_mod == "no" or run_as_mod == "n":
-                        run_as_code = False
-                        break
-                    elif run_as_mod == "exit":
-                        cancel_run = True
-                        break
-                    else:
-                        print_colored_text("[red]Invalid Input!")
-            
-                if not cancel_run:
-                    if run_as_code:
-                        # Extract the Python script or module name from the command
-                        command_parts = command_output.split()
-                        script_name = None
-                        for i, part in enumerate(command_parts):
-                            if part.endswith(".py"):
-                                script_name = part
-                                break
-                            elif part == "-m" and i < len(command_parts) - 1:
-                                script_name = command_parts[i + 1] + ".py"  # Assuming the module name is a Python file name
-                                break
-
-                        # Open and read the script if the name is found
-                        if script_name:
-                            try:
-                                with open(script_name, 'r') as file:
-                                    python_code = file.read()
-
-                                print(f"python_code = {python_code}")
-
-                                # Now, python_code contains the content of the Python file
-                                # You can now pass this code to execute_python_script function
-                                command_output = await self.execute_python_script(python_code)
-
-                            except FileNotFoundError:
-                                print_colored_text(f"[red]Error: The file {script_name} was not found.")
-                                logging.info(f"Translate Command Error: The file {script_name} was not found.")
-                            except Exception as e:
-                                print_colored_text(f"[red]Error: An error occurred while reading the file {script_name}: {e}")
-                                logging.info(f"Translate Command Error: An error occurred while reading the file {script_name}: {e}")
-                        else:
-                            print_colored_text("[red]Error: No Python script name could be extracted from the command.")
-                            logging.info(f"Translate Command Error: No Python script name could be extracted from the command.")
-                    else:
-                        success, command_output = await self.execute_command(command_output)
-                        if not success:
-                            print_colored_text(f"[red]Exe Error: {command_output.err}")
-                            command_output = command_output.err
-                        else:
-                            command_output = command_output.out
-                        logging.info(f"Translate Command Execute : {command_output}")
-                else:
-                    logging.info(f"Translate Command Cancled : {command_output}")
-            else:
-                success, command_output = await self.execute_command(command_output)
-                if not success and command_output.err.strip() != "":
-                    print_colored_text(f"[red]Exe Error: {command_output.err}")
-                    command_output = command_output.err
-                else:
-                    command_output = command_output.out
-                logging.info(f"Translate Command Execute : {command_output}")
-
-            
-        else:
-            check_list = ["shell", "batch", "bash", "python"]
-            multi_scripts = []
-            for check in check_list:
-                # Create a regex pattern based on the current check
-                pattern = re.compile(f'```{check}(.*?)```', re.DOTALL)
-                
-                # Find all occurrences of the pattern in command_output
-                for match in pattern.finditer(command_output):
-                    # Extract the matched script content
-                    script_content = match.group(1)
-                    
-                    # Assuming self.check_script processes the script content
-                    #check_command_output = self.check_script(check, script_content)
-                    print(f"script_content = {script_content}")
-                    check_command_output = script_content.strip()
-
-                    print(f"check_command_output = {check_command_output}")
-                    
-                    add_match = {
-                        "check": check,
-                        "check_command": check_command_output
-                    }
-                    
-                    multi_scripts.append(add_match)
-
-            canceled = False
-            check_type = ""
-            if len(multi_scripts) > 0:
-                if len(multi_scripts) > 1:
-                    while True:
-                        print_colored_text(f"[yellow]===== Base Command =====\n[white]{command_output}\n[yellow]========================")
-                        print_colored_text(f"[yellow]Found {len(multi_scripts)} diffrent scripts in the response")
-                        for m, multi_script in enumerate(multi_scripts):
-                            print_colored_text(f"[yellow]{m + 1} :[white] {multi_script['check']}")
-                        
-                        print_colored_text(f"[yellow]{len(multi_scripts) + 1} :[white] Cancel")
-                        get_check = capture_styled_input("[yellow]Select the type of script you want to run: ")
-
-                        if get_check.isdigit:
-                            get_check = int(get_check)
-                            if get_check != len(multi_scripts) + 1 and get_check > 0 and get_check <= len(multi_scripts):
-                                command_output = multi_scripts[get_check - 1]["check_command"]
-                                break
-                            elif get_check == len(multi_scripts) + 1:
-                                canceled = True
-                                break
-                else:
-                    command_output = multi_scripts[0]["check_command"]
-
-            else:
-                code_type = self.detect_language(command_output)
-                print(f"code_type = {code_type}")
-                if code_type == "Python":
-                   check_type = "python"
-                elif code_type == "Text only":
-                    # Skip files to do nothing with
-                    pass
-                else:
-                   # Unknown text script Type
-                   print(f"code_type = {code_type}")
-                   canceled = True
-        
-            if not canceled:
-                print(f"check_type = {check_type}")
-                if check_type == "shell" or check_type == "batch" or check_type == "bash":
-                    print(f"command_output 1 = {command_output}")
-                    command_output = await self.execute_shell_section(command_output)
-                elif check_type == "python":
-                    print(f"command_output 2 = {command_output}")
-                    command_output = await self.execute_python_script(command_output)
-                else:
-                    print(f"command_output 3 = {command_output}")
-                    command_output = await self.run_command(command_output)
-
-                print(f"command_output = {command_output}")
-                if command_output.err != "":
-                    print_colored_text(f"[red]Shell Error: {command_output.out}")
-                    command_output = command_output.err
-                else:    
-                    command_output = command_output.out
-
-                logging.info(f"Translate Shell Execute : {command_output}")
-
-        logging.info(f"Translate command output : {command_output}")
-
-        return command_output
     
     def check_script(self, code_type, text):
         command_output = text
