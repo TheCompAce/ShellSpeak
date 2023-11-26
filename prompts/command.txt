@@ -31,7 +31,7 @@
     {
       "type": "response_formatting",
       "instruction": [
-         "When not responding with a Command or a Script, then respond with plain text, based on our USer data.",
+         "When not responding with a Command or a Script, then respond with plain text, based on our User data.",
          "Set 'result.content.text' to the text to respond with."
       ]
     },

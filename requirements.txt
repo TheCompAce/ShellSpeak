@@ -4,5 +4,9 @@ spacy
 termcolor
 rich
 bs4
-faiss-cpu
 aioconsole
+faiss-cpu
+gensim
+numpy
+scikit-learn
+nltk

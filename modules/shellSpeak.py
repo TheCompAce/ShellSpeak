@@ -17,17 +17,20 @@ from modules.command_result import CommandResult
 
 from modules.llm import LLM, ModelTypes
 from modules.run_command import CommandRunner
-from modules.utils import get_file_size, get_token_count, is_valid_filename, list_files_and_folders_with_sizes, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, trim_to_right_token_count, trim_to_token_count, replace_placeholders
-from modules.vectors import find_relevant_file_segments
+from modules.utils import get_file_size, is_valid_filename, list_files_and_folders_with_sizes, load_settings, map_possible_commands, get_os_name, print_colored_text, capture_styled_input, read_file, redact_json_values, replace_placeholders, get_token_count, trim_to_right_token_count, trim_to_token_count
 
 
+from functools import partial
+from multiprocessing import Pool, TimeoutError
+# Load English tokenizer, POS tagger, parser, NER and word vectors
 nlp = spacy.load("en_core_web_sm")
+
 logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 
 class ShellSpeak:
-    def __init__(self, settings, base_path):
+    def __init__(self, settings, base_path, vectorDb):
         self.llm_len = int(settings.get("llm_size", 14000))
         self.llm_history_len = int(settings.get("llm_history_size", 4000))
         self.llm_file_len = int(settings.get("llm_file_size", 4000))
@@ -43,9 +46,11 @@ class ShellSpeak:
         self.vector_for_commands = settings.get("vector_for_commands", False)
         self.vector_for_history = settings.get("vector_for_history", True)
         self.vector_for_folders = settings.get("vector_for_folders", True)
-        
 
-        
+        self.data_file = 'path_to_your_data_file.json'
+        self.use_indexing = settings.get('use_indexing', False)
+
+        self.vector_db = vectorDb
 
         self.settings = settings
         self.command_history = ""
@@ -216,7 +221,6 @@ class ShellSpeak:
             else:
                 logging.error("No output to determine the new working directory")
 
-            print(f"stdout = {stdout}")
             if stdout.find("Traceback (most recent call last):") > -1:
                 stderr = stdout
                 stdout = command
@@ -236,9 +240,6 @@ class ShellSpeak:
 
 
     def shrink_file_data(self, file_data, target_tokens):
-        if len(file_data) > nlp.max_length:
-            file_data = file_data[:len(file_data) - nlp.max_length]
-
         # Get the current token count of file_data
         current_tokens = get_token_count(file_data)
 
@@ -283,30 +284,35 @@ class ShellSpeak:
         return new_file_list
 
 
-    def string_sizer(self, data, context, len=1024, use_vector=True):
-        set_data = data
+    def string_sizer(self, data, context, length=1024, use_vector=True):
+        set_data = data.strip()
         token_count = get_token_count(set_data)
-        if token_count > len:
+        print(f"token_count = {token_count}")
+        if token_count > length:
             if use_vector:
-                relevant_segments = find_relevant_file_segments(
-                            history_text= context,
-                            file_data=set_data,
-                            window_size=len, # or any other size you deem appropriate (8124)
-                            overlap=self.llm_slide_len,      # or any other overlap size you deem appropriate
-                            top_k=1           # or any other number of segments you deem appropriate
-                        )
+                relevant_segments = self.vector_db.search_similar_conversations(context, top_n=length)
+                # relevant_segments = find_relevant_file_segments(
+                #            history_text= context,
+                #            file_data=set_data,
+                #            window_size=length, # or any other size you deem appropriate (8124)
+                #            overlap=self.llm_slide_len,      # or any other overlap size you deem appropriate
+                #            top_k=1           # or any other number of segments you deem appropriate
+                #        )
+                # set_data = '\n'.join([f"[{item[0]}, {item[1]}, {item[2]}]" for item in relevant_segments])
+
                 set_data = '/n.../n'.join(relevant_segments)
             else:
                 set_data = trim_to_right_token_count(set_data, len)
+        
         data_tokens = get_token_count(set_data)
         logging.info(f"Translate to Command History Token Count : {data_tokens}")
-
         return data_tokens, set_data
 
     async def translate_to_command(self, user_input):
         user_command_prompt = self.settings['user_command_prompt']
         send_prompt = self.settings['command_prompt']
-        max_llm = (self.llm_len - 80) #80 is used to padd json formating of System Messages and over all prompt size.
+        max_llm = (self.llm_len - 80) #80 is used to pad json formatting of System Messages and over all prompt size.
+        
         max_llm -= get_token_count(send_prompt)
         max_llm -= get_token_count(user_input)
         
@@ -353,8 +359,13 @@ class ShellSpeak:
             
             for file in self.files:
                 file_data_content = read_file(file)  # Note: Changed to 'file_data_content'
-                if len(file_data_content) > nlp.max_length:
-                    file_data_content = file_data_content[:len(file_data_content) - nlp.max_length]
+                if len(file_data_content) > 50000:  #Cap for NLP = 1000000
+                    # Prompt the user for a decision
+                    include_file = input(f"The file {file} is very large. Do you want to include it? (yes/no): ")
+                    if include_file.lower() != 'yes' or include_file.lower() != 'y':
+                        print_colored_text(f"[yellow]Skipping file: {file}")
+                        continue  # Skip the rest of the loop and therefore the file
+
 
                 file_data = {
                     "file": file,
@@ -389,16 +400,19 @@ class ShellSpeak:
                     
             if len(new_files_data) > 0:
                 for new_file in new_files_data:
-                    print_colored_text(f"[blue]File {new_file['file']} Trimming")
-                    relevant_segments = find_relevant_file_segments(
-                            history_text=folder_list + "\n" + command_history + "\n"+ user_input,
-                            file_data=new_file['file_data'],
-                            window_size=new_file['file_tokens'], # or any other size you deem appropriate (8124)
-                            overlap=self.llm_slide_len,      # or any other overlap size you deem appropriate
-                            top_k=1           # or any other number of segments you deem appropriate
-                        )
+                    print_colored_text(f"[cyan]File {new_file['file']} Trimming")
+                    relevant_segments = self.vector_db.search_similar_conversations(new_file['file_data'])
+                    # relevant_segments = find_relevant_file_segments(
+                    #         history_text=folder_list + "\n" + command_history + "\n"+ user_input,
+                    #        file_data=new_file['file_data'],
+                    #        window_size=new_file['file_tokens'], # or any other size you deem appropriate (8124)
+                    #        overlap=self.llm_slide_len,      # or any other overlap size you deem appropriate
+                    #        top_k=1           # or any other number of segments you deem appropriate
+                    #    )
                     new_file['file_data'] = '/n.../n'.join(relevant_segments)
-                    new_file['file_tokens'] = get_token_count(new_file['file_data'])
+                    file_data_content = new_file['file_data']
+                    
+                    new_file['file_tokens'] = get_token_count(file_data_content)
 
                     files_data[new_file["fileIndex"]] = new_file
 
@@ -457,12 +471,27 @@ class ShellSpeak:
         # loop = asyncio.get_event_loop()
         # command_output = await loop.run_in_executor(None, lambda: self.llm.ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI"))))
         command_output = await self.llm.async_ask(system_command_prompt, user_command_prompt, model_type=ModelTypes(self.settings.get('model', "OpenAI")), return_type="json_object")
+        # save_history_data(user_command_prompt, f"User : {system_command_prompt}", self.settings)
+        self.vector_db.store_long_term_memory(f"System : {system_command_prompt}\n User : {user_command_prompt}")
         logging.info(f"Translate to Command return Response : {command_output}")
 
         display_content = ""
         display_error = None
         try:
-            command_output_obj = json.loads(command_output)
+            if not isinstance(command_output, str):
+                # Convert non-string command_output to a JSON-formatted string
+                command_output_obj = {
+                    "type": "Unknown",
+                    "Content": f"{command_output}"
+                }
+            try:
+                command_output_obj = json.loads(command_output)
+            except json.JSONDecodeError as e:
+                # Handle JSON decoding error if it occurs
+                # You might want to log this error or handle it as per your application's needs
+                command_output_obj = {"type": "Error", "content": str(e)}
+
+
             logging.info(f"Translate return Response : {command_output}")
             type = command_output_obj["type"]
             content = command_output_obj.get("content", None)
@@ -473,7 +502,7 @@ class ShellSpeak:
                     command = content["command"]
                     if len(command) > 6 and command[:6] == "python":
                         while True:
-                            run_as_mod = capture_styled_input("[yellow]Do you want to add our compatablity code? (yes/no/exit) :")
+                            run_as_mod = capture_styled_input("[yellow]Do you want to add our compatibility code? (yes/no/exit) :")
                             run_as_code = False
                             cancel_run = False
                             if run_as_mod == "yes" or run_as_mod == "y":
@@ -507,11 +536,10 @@ class ShellSpeak:
                                         with open(script_name, 'r') as file:
                                             python_code = file.read()
 
-                                        print(f"python_code = {python_code}")
 
                                         # Now, python_code contains the content of the Python file
                                         # You can now pass this code to execute_python_script function
-                                        command_output = await self.execute_python_script(python_code)
+                                        display_content = await self.execute_python_script(python_code)
 
                                     except FileNotFoundError:
                                         print_colored_text(f"[red]Error: The file {script_name} was not found.")
@@ -526,20 +554,20 @@ class ShellSpeak:
                                 success, command_output = await self.execute_command(command_output)
                                 if not success:
                                     print_colored_text(f"[red]Exe Error: {command_output.err}")
-                                    command_output = command_output.err
+                                    display_content = command_output.err
                                 else:
-                                    command_output = command_output.out
+                                    display_content = command_output.out
                                 logging.info(f"Translate Command Execute : {command_output}")
                         else:
-                            logging.info(f"Translate Command Cancled : {command_output}")
+                            logging.info(f"Translate Command Canceled : {command_output}")
                     else:
                         success, command_output = await self.execute_command(command)
                         if not success and command_output.err.strip() != "":
                             print_colored_text(f"[red]Exe Error: {command_output.err}")
-                            command_output = command_output.err
+                            display_content = command_output.err
                         else:
-                            command_output = command_output.out
-                        logging.info(f"Translate Command Execute : {command_output}")
+                            display_content = command_output.out
+                        logging.info(f"Translate Command Execute : {display_content}")
                     pass
                 elif type == "script_creation":
                     script_text = content['script']
@@ -547,21 +575,21 @@ class ShellSpeak:
                     script_filename = content.get('script_filename', None)
 
                     if script_type == "shell" or script_type == "batch" or script_type == "bash":
-                        command_output = await self.execute_shell_section(script_text, script_filename)
+                        display_content = await self.execute_shell_section(script_text, script_filename)
                     elif script_type == "python":
-                        command_output = await self.execute_python_script(script_text, script_filename)
+                        display_content = await self.execute_python_script(script_text, script_filename)
                     else:
-                        command_output = CommandResult(script_text, f"Invalid Script Type : {script_type}")
+                        display_content = CommandResult(script_text, f"Invalid Script Type : {script_type}")
 
                     if command_output.err != "":
                         print_colored_text(f"[red]Shell Error: {command_output.err} with {command_output.out}")
-                        command_output = command_output.err
+                        display_content = command_output.err
                     else:    
-                        command_output = command_output.out
+                        display_content = command_output.out
 
                     logging.info(f"Translate Shell Execute : {command_output}")
                 elif type == "response_formatting":
-                    command_output = content["text"]
+                    display_content = content["text"]
                 elif type == "error_handling":
                     display_content = content["type"]
                     display_error = err
@@ -611,6 +639,7 @@ class ShellSpeak:
     def translate_output(self, output, is_internal=False):
         logging.info(f"Translate Output : {output}")
         send_prompt = self.settings['display_prompt']
+
         total_tokens = self.llm_output_size - (get_token_count(send_prompt) + get_token_count(output) + 80)
 
         set_command_history = self.command_history
@@ -619,7 +648,8 @@ class ShellSpeak:
         if token_count > total_tokens:
             set_command_history = trim_to_right_token_count(set_command_history, total_tokens)
 
-        max_llm = (self.llm_len - 80) #80 is used to padd json formating of System Messages and over all prompt size.
+        max_llm = (self.llm_len - 80) #80 is used to padd json formatting of System Messages and over all prompt size.
+        
         max_llm -= get_token_count(send_prompt)
         max_llm -= get_token_count(output)
         
@@ -649,6 +679,8 @@ class ShellSpeak:
         logging.info(f"Translate Output Display System Prompt : {send_prompt}")
         logging.info(f"Translate Output Display User Prompt : {output}")
         display_output = self.llm.ask(send_prompt, output, model_type=ModelTypes(self.settings.get('model', "OpenAI")), return_type="text")
+        # save_history_data(output, f"Assistant : {send_prompt}", self.settings)
+        self.vector_db.store_long_term_memory(f"System : {send_prompt}\n User : {output}")
 
         logging.info(f"Translate Output Display Response : {display_output}")
         return display_output
@@ -678,6 +710,8 @@ class ShellSpeak:
                 self.display_help()
             elif user_input.lower() == 'rset':
                 self.display_output(f"Settings Updated.")
+            elif user_input.lower() == 'rset':
+                self.display_output(f"Settings Updated.")
             elif user_input.lower() == 'clm':
                 self.command_history = ""
                 # self.command_history += f"Command Input: {user_input}\nCommand Output: Command History cleared.\n"
@@ -700,13 +734,19 @@ class ShellSpeak:
                     try:
                        translated_command = await self.translate_to_command(user_input)
                     except Exception as e:
-                        translated_command = e
+                        translated_command = {
+                            "err" : "Invalid user_input!",
+                            "out": e
+                        }
                     # if translated_command.err == "":
                     #    translated_output = self.translate_output(translated_command)
                     #    self.command_history += f"Command Input: {user_input}\nCommand Output: {translated_output}\n"
                     #    self.display_output(translated_output)
                     #else:
-                    
+                    user_input = redact_json_values(user_input, ["run_command_list", "command_files"])
+
                     self.command_history += f"History: [Time: {timestamp}\nInput: {user_input}\nOutput: {translated_command}]\n"
+                    if not isinstance(translated_command, str):
+                        translated_command = str(translated_command)  # Convert non-string output to string
                     translated_output = self.translate_output(translated_command)
                     self.display_output(translated_output)

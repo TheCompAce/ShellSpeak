@@ -16,9 +16,11 @@ if not exist env (
     call env\Scripts\activate
 
     echo Installing dependencies...
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118  | find /V "already satisfied"
+    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121  | find /V "already satisfied"
     pip install -r requirements.txt | find /V "already satisfied"
+    REM pip install -c torch -c nvidia faiss-gpu
     python -m spacy download en_core_web_sm
+    
 )
 call env\Scripts\activate
 pip install -r requirements.txt | find /V "already satisfied"

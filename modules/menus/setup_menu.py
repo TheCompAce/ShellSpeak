@@ -1,19 +1,6 @@
 # Save settings to a JSON file
 import json
-
-# Load settings from a JSON file
-def load_settings(filepath):
-    try:
-        with open(filepath, 'r') as f:
-            settings = json.load(f)
-        return settings
-    except FileNotFoundError:
-        return {}
-
-
-def save_settings(settings, filepath):
-    with open(filepath, 'w') as f:
-        json.dump(settings, f, indent=4)
+from modules.save_load import load_settings, save_settings
 
 # Setup menu function
 def setup_menu():
@@ -28,8 +15,9 @@ def setup_menu():
         print("\nSetup Menu:")
         print("1. System Prompt")
         print("2. User Prompt")
-        print("2. Display Prompt")
-        print("3. Back to Main Menu")
+        print("3. Display Prompt")
+        print(f"4. Use Indexing (Currently {'Enabled' if settings.get('use_indexing', False) else 'Disabled'})")
+        print("5. Back to Main Menu")
         
         choice = input("Choose an option: ")
         
@@ -40,6 +28,10 @@ def setup_menu():
         elif choice == '3':
             settings['display_prompt'] = input("Enter the Display Prompt (or File Path): ")        
         elif choice == '4':
+            current_status = 'enabled' if settings.get('use_indexing', False) else 'disabled'
+            check = input(f"Do you want to enable Index Building? It is currently {current_status}. (yes/no): ")
+            settings['use_indexing'] = check.lower() in ["yes", "y"]
+        elif choice == '5':
             print("Returning to Main Menu.")
             break
         else:

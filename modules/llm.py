@@ -94,7 +94,6 @@ class LLM:
         api_url = "https://api.openai.com/v1/chat/completions"
         token_ct = 0
         token_ct = max_tokens - int(get_token_count(system_prompt + "\n" + user_prompt) + 20)
-        print(f"model = {model}")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
@@ -132,20 +131,20 @@ class LLM:
                 response = e.response
                 tries -= 1
 
-        if response:
-            if not is_error:
-                if response.status_code == 200:
-                    response_data = response.json()
-                    return response_data["choices"][0]["message"]["content"]
-                else:
-                    print(f"response = {response.__dict__}")
-                    return f"Error (_ask_openai): {response.status_code} - {response.json()}"
+        try:
+            response = requests.post(api_url, headers=headers, json=data, timeout=(2, 60))
+            if response.status_code == 200:
+                response_data = response.json()
+                return response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            elif response.status_code == 401:
+                return "Error: Unauthorized - Invalid API key (OPENAI_API_KEY)."
             else:
-                print(f"response = {response}")
-                return f"Error (_ask_openai): {response}"
-        else:
-            print(f"response = {response.__dict__}")
-            return f"Error (_ask_openai): No Reponse."
+                return f"Error: Received HTTP status {response.status_code} - {response.text}"
+        except requests.Timeout:
+            return "Error: Timeout occurred while contacting OpenAI API."
+        except requests.exceptions.RequestException as e:
+            return f"Error: An error occurred during the request - {str(e)}"
+
 
     def _ask_mistral(self, system_prompt, user_prompt):
         if self.tokenizerObj is None or self.modelObj is None:

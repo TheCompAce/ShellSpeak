@@ -6,44 +6,9 @@ import spacy
 import re
 from rich.console import Console
 
-from functools import partial
-from multiprocessing import Pool, TimeoutError
-
-console = Console()
-
-token_adjust = 2.5
-
-# Load English tokenizer, POS tagger, parser, NER and word vectors
 nlp = spacy.load("en_core_web_sm")
 
-def get_token_count(text):
-    doc = nlp(text)
-    return int(len(doc) * token_adjust)
-
-def trim_to_token_count(text, max_tokens):
-    adjust_tokens = int(max_tokens / token_adjust)
-    doc = nlp(text)
-    trimmed_text = " ".join(token.text for token in doc[:adjust_tokens])
-    return trimmed_text
-
-def trim_to_right_token_count(text, max_tokens):
-    adjust_tokens = int(max_tokens / token_adjust)
-    doc = nlp(text)
-    start = len(doc) - adjust_tokens if len(doc) > adjust_tokens else 0
-    trimmed_text = " ".join(token.text for token in doc[start:])
-    return trimmed_text
-
-def trim_to_mid_token_count(text, start, max_tokens):
-    adjust_tokens = int(max_tokens / token_adjust)
-    doc = nlp(text)
-    # Ensure start is within bounds
-    start = max(0, min(len(doc) - 1, start))
-    end = start + adjust_tokens
-    # If max_tokens is more than the remaining tokens from start, adjust end
-    end = min(len(doc), end)
-    trimmed_text = " ".join(token.text for token in doc[start:end])
-    return trimmed_text
-
+console = Console()
 
 def get_os_name():
     return platform.system()
@@ -277,3 +242,188 @@ def list_files_and_folders_with_sizes(start_path):
             'size': size  # Size is in bytes
         })
     return files_and_folders
+
+def redact_json_values(story, keys_to_redact):
+    # Find all JSON objects in the string
+    json_objects = re.findall(r'\{.*?\}', story, re.DOTALL)
+    
+    for json_obj in json_objects:
+        # Load the JSON object into a Python dictionary
+        try:
+            data = json.loads(json_obj)
+        except json.JSONDecodeError:
+            continue  # Skip if it's not valid JSON
+        
+        # Recursive function to redact specified keys
+        def redact(data):
+            if isinstance(data, dict):
+                for key in data:
+                    if key in keys_to_redact:
+                        data[key] = "..."
+                    else:
+                        redact(data[key])
+            elif isinstance(data, list):
+                for item in data:
+                    redact(item)
+
+        # Redact the necessary keys
+        redact(data)
+        
+        # Convert the dictionary back to a JSON string
+        redacted_json = json.dumps(data, indent=2)
+        
+        # Replace the original JSON string in the story
+        story = story.replace(json_obj, redacted_json)
+    
+    return story
+
+import json
+import re
+
+def redact_json_key_values_in_text(text, keys_to_redact):
+    """
+    Redacts the values of specified keys in JSON objects or arrays found within a text.
+
+    Parameters:
+    - text (str): The text containing potential JSON data.
+    - keys_to_redact (list): A list of keys whose values should be redacted.
+
+    Returns:
+    - str: The text with redacted values in JSON objects or arrays.
+    """
+
+    def redact(data):
+        """
+        Recursively redacts specified keys in a JSON object or array.
+
+        Parameters:
+        - data (dict or list): The JSON object or list to redact.
+        """
+        if isinstance(data, dict):
+            for key in data:
+                if key in keys_to_redact:
+                    data[key] = "[REDACTED]"
+                else:
+                    redact(data[key])
+        elif isinstance(data, list):
+            for i in range(len(data)):
+                redact(data[i])
+
+    # Regular expression pattern to match JSON objects and arrays
+    json_pattern = re.compile(r'(\{.*?\}|\[.*?\])', re.DOTALL)
+
+    # Find all JSON objects or arrays in the string
+    json_strings = json_pattern.findall(text)
+    
+    for json_str in json_strings:
+        # Load the JSON string into a Python object
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError:
+            continue  # Skip if it's not valid JSON
+        
+        # Redact the necessary keys
+        redact(data)
+        
+        # Convert the object back to a JSON string
+        redacted_json = json.dumps(data, indent=2)
+        
+        # Replace the original JSON string in the text
+        text = text.replace(json_str, redacted_json)
+    
+    return text
+
+def redact_json_values_in_text(text, values_to_redact):
+    """
+    Redacts specific values in JSON objects embedded within natural text.
+
+    Parameters:
+    - text (str): The text containing JSON objects.
+    - values_to_redact (list): A list of values to be redacted.
+
+    Returns:
+    - str: The text with values redacted in JSON objects.
+    """
+
+    def redact_values(data):
+        """
+        Recursive function to redact values in a dictionary or list.
+        """
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if value in values_to_redact:
+                    data[key] = "...redacted..."
+                else:
+                    redact_values(value)
+        elif isinstance(data, list):
+            for i in range(len(data)):
+                if data[i] in values_to_redact:
+                    data[i] = "...redacted..."
+                else:
+                    redact_values(data[i])
+
+    # Regular expression to find JSON objects in the text
+    json_objects = re.findall(r'\{.*?\}', text, re.DOTALL)
+
+    for json_obj in json_objects:
+        try:
+            # Convert JSON string to a Python object
+            data = json.loads(json_obj)
+            # Redact the specified values
+            redact_values(data)
+            # Convert the Python object back to a JSON string
+            redacted_json = json.dumps(data, indent=2)
+            # Replace the original JSON string in the text
+            text = text.replace(json_obj, redacted_json)
+        except json.JSONDecodeError:
+            # Skip if it's not valid JSON
+            continue
+
+    return text
+
+def get_token_count(text, token_adjust=1):
+    # Define the maximum length for a text chunk
+    max_length = 1000000
+
+    # Initialize the total token count
+    total_token_count = 0
+
+    # Split the text into chunks of up to max_length characters
+    for start in range(0, len(text), max_length):
+        # Get a chunk of text
+        chunk = text[start:start + max_length]
+
+        # Process the chunk with the NLP tool
+        doc = nlp(chunk)
+
+        # Update the total token count
+        total_token_count += int(len(doc) * token_adjust)
+
+    # Return the total token count
+    return total_token_count
+
+token_adjust = 2.5
+
+def trim_to_token_count(text, max_tokens):
+    adjust_tokens = int(max_tokens / token_adjust)
+    doc = nlp(text)
+    trimmed_text = " ".join(token.text for token in doc[:adjust_tokens])
+    return trimmed_text
+
+def trim_to_right_token_count(text, max_tokens):
+    adjust_tokens = int(max_tokens / token_adjust)
+    doc = nlp(text)
+    start = len(doc) - adjust_tokens if len(doc) > adjust_tokens else 0
+    trimmed_text = " ".join(token.text for token in doc[start:])
+    return trimmed_text
+
+def trim_to_mid_token_count(text, start, max_tokens):
+    adjust_tokens = int(max_tokens / token_adjust)
+    doc = nlp(text)
+    # Ensure start is within bounds
+    start = max(0, min(len(doc) - 1, start))
+    end = start + adjust_tokens
+    # If max_tokens is more than the remaining tokens from start, adjust end
+    end = min(len(doc), end)
+    trimmed_text = " ".join(token.text for token in doc[start:end])
+    return trimmed_text
